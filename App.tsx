@@ -11,7 +11,7 @@ type Action =
   | { type: 'DEAL_CARDS' }
   | { type: 'SELECT_HAND_CARD', cardId: string }
   | { type: 'TOGGLE_TABLE_PILE', pileId: string }
-  | { type: 'PLAYER_MOVE', moveType: 'capture' | 'discard' | 'build', playedCardId: string, targetPileIds: string[] }
+  | { type: 'PLAYER_MOVE', moveType: 'capture' | 'discard' | 'build' | 'trotta', playedCardId: string, targetPileIds: string[] }
   | { type: 'OPPONENT_MOVE' }
   | { type: 'END_ROUND' }
   | { type: 'LOG', message: string };
@@ -139,6 +139,55 @@ const gameReducer = (state: GameState, action: Action): GameState => {
           isBuild: false
         });
         newLogs.push({ id: Date.now() + 'd', message: `You discarded ${playedCard.suit} ${playedCard.rank}.`, type: 'info' });
+      } else if (moveType === 'build') {
+        // Build: Combine played card with selected piles
+        const builtPiles = state.table.filter(p => targetPileIds.includes(p.id));
+        let buildCards: Card[] = [playedCard];
+        builtPiles.forEach(p => {
+          buildCards = [...buildCards, ...p.cards];
+        });
+        
+        // Calculate build value from played card's hand value
+        const buildValue = getHandValue(playedCard);
+        
+        // Remove old piles
+        newTable = newTable.filter(p => !targetPileIds.includes(p.id));
+        
+        // Add new build pile
+        newTable.push({
+          id: `build-${Date.now()}`,
+          cards: buildCards,
+          isBuild: true,
+          buildValue: buildValue,
+          owner: 'player',
+          isLocked: false
+        });
+        
+        newLogs.push({ id: Date.now() + 'pb', message: `You built ${buildValue}.`, type: 'info' });
+      } else if (moveType === 'trotta') {
+        // Trötta: Consolidate all matching cards into locked build
+        const trottaPiles = state.table.filter(p => targetPileIds.includes(p.id));
+        let trottaCards: Card[] = [playedCard];
+        const trottaValue = getTableValue(playedCard);
+        
+        trottaPiles.forEach(p => {
+          trottaCards = [...trottaCards, ...p.cards];
+        });
+        
+        // Remove consolidated piles
+        newTable = newTable.filter(p => !targetPileIds.includes(p.id));
+        
+        // Create locked build
+        newTable.push({
+          id: `trotta-${Date.now()}`,
+          cards: trottaCards,
+          isBuild: true,
+          buildValue: trottaValue,
+          owner: 'player',
+          isLocked: true // Trötta always locks
+        });
+        
+        newLogs.push({ id: Date.now() + 'ptr', message: `You tröttade ${trottaValue} (${trottaCards.length} cards).`, type: 'action' });
       }
 
       return {
@@ -284,14 +333,17 @@ const App: React.FC = () => {
 
   // Check for dealing or end game
   useEffect(() => {
-    if (state.player.hand.length === 0 && state.opponent.hand.length === 0 && !state.gameOver) {
+    // Only check if game has actually started (table has been dealt or there are logs)
+    const gameHasStarted = state.table.length > 0 || state.logs.length > 0;
+    
+    if (gameHasStarted && state.player.hand.length === 0 && state.opponent.hand.length === 0 && !state.gameOver) {
        if (state.deck.length > 0) {
            setTimeout(() => dispatch({ type: 'DEAL_CARDS' }), 1000);
        } else {
            setTimeout(() => dispatch({ type: 'END_ROUND' }), 1000);
        }
     }
-  }, [state.player.hand.length, state.opponent.hand.length, state.deck.length, state.gameOver]);
+  }, [state.player.hand.length, state.opponent.hand.length, state.deck.length, state.gameOver, state.table.length, state.logs.length]);
 
   // Trigger Opponent Move
   useEffect(() => {
@@ -335,9 +387,64 @@ const App: React.FC = () => {
       dispatch({ type: 'PLAYER_MOVE', moveType: 'discard', playedCardId: state.selectedHandCardId, targetPileIds: [] });
   };
 
+  const handleBuild = () => {
+      if (!state.selectedHandCardId) return;
+      const handCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
+      if (!handCard) return;
+
+      const selectedPiles = state.table.filter(p => state.selectedTablePileIds.includes(p.id));
+      const buildValue = canBuild(handCard, selectedPiles, state.player.hand);
+      
+      if (buildValue) {
+          dispatch({ type: 'PLAYER_MOVE', moveType: 'build', playedCardId: handCard.id, targetPileIds: state.selectedTablePileIds });
+      } else {
+          alert("Invalid Build! You need a reservation card in hand.");
+      }
+  };
+
+  const handleTrotta = () => {
+      if (!state.selectedHandCardId) return;
+      const handCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
+      if (!handCard) return;
+
+      // Trötta: Consolidate ALL cards/piles with same table value
+      const trottaValue = getTableValue(handCard);
+      
+      // Find all matching piles/cards on table
+      const matchingPiles = state.table.filter(p => {
+          const pileValue = getPileValue(p);
+          // Match singles, 2-card structures, or builds with this value
+          if (p.cards.length <= 2 && pileValue === trottaValue) return true;
+          if (p.isBuild && p.buildValue === trottaValue) return true;
+          return false;
+      });
+
+      if (matchingPiles.length === 0) {
+          alert("No cards on table match this card's value for Trötta.");
+          return;
+      }
+
+      // Dispatch trotta move
+      dispatch({ 
+          type: 'PLAYER_MOVE', 
+          moveType: 'trotta', 
+          playedCardId: handCard.id, 
+          targetPileIds: matchingPiles.map(p => p.id)
+      });
+  };
+
   const selectedCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
   const selectedPiles = state.table.filter(p => state.selectedTablePileIds.includes(p.id));
   const canPerformCapture = selectedCard && selectedPiles.length > 0 && canCapture(selectedCard, selectedPiles);
+  const canPerformBuild = selectedCard && canBuild(selectedCard, selectedPiles, state.player.hand) !== null;
+  
+  // Trötta: Check if any piles on table match card's table value
+  const canPerformTrotta = selectedCard && state.table.some(p => {
+      const pileValue = getPileValue(p);
+      const trottaValue = getTableValue(selectedCard);
+      return (p.cards.length <= 2 && pileValue === trottaValue) || 
+             (p.isBuild && p.buildValue === trottaValue);
+  });
 
   return (
     <div className="flex flex-col h-screen max-w-6xl mx-auto p-4 gap-4">
@@ -427,14 +534,28 @@ const App: React.FC = () => {
                     <button 
                         disabled={!canPerformCapture}
                         onClick={handleCapture}
-                        className={`px-6 py-2 rounded font-bold uppercase tracking-wider transition-colors ${canPerformCapture ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                        className={`px-4 py-2 rounded font-bold uppercase tracking-wider transition-colors text-sm ${canPerformCapture ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
                     >
                         Capture
                     </button>
                     <button 
+                        disabled={!canPerformBuild}
+                        onClick={handleBuild}
+                        className={`px-4 py-2 rounded font-bold uppercase tracking-wider transition-colors text-sm ${canPerformBuild ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                    >
+                        Build
+                    </button>
+                    <button 
+                        disabled={!canPerformTrotta}
+                        onClick={handleTrotta}
+                        className={`px-4 py-2 rounded font-bold uppercase tracking-wider transition-colors text-sm ${canPerformTrotta ? 'bg-purple-500 hover:bg-purple-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                    >
+                        Trötta
+                    </button>
+                    <button 
                          disabled={!state.selectedHandCardId}
                          onClick={handleDiscard}
-                         className={`px-6 py-2 rounded font-bold uppercase tracking-wider transition-colors ${state.selectedHandCardId && state.selectedTablePileIds.length === 0 ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                         className={`px-4 py-2 rounded font-bold uppercase tracking-wider transition-colors text-sm ${state.selectedHandCardId && state.selectedTablePileIds.length === 0 ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
                     >
                         Discard
                     </button>
