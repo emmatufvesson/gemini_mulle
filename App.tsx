@@ -11,7 +11,7 @@ type Action =
   | { type: 'DEAL_CARDS' }
   | { type: 'SELECT_HAND_CARD', cardId: string }
   | { type: 'TOGGLE_TABLE_PILE', pileId: string }
-  | { type: 'PLAYER_MOVE', moveType: 'capture' | 'discard' | 'build' | 'trotta', playedCardId: string, targetPileIds: string[] }
+  | { type: 'PLAYER_MOVE', moveType: 'capture' | 'discard' | 'build' | 'trotta', playedCardId: string, targetPileIds: string[], buildDirection?: 'up' | 'down' }
   | { type: 'OPPONENT_MOVE' }
   | { type: 'END_ROUND' }
   | { type: 'LOG', message: string };
@@ -143,12 +143,29 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         // Build: Combine played card with selected piles
         const builtPiles = state.table.filter(p => targetPileIds.includes(p.id));
         let buildCards: Card[] = [playedCard];
+        const playedCardTableValue = getTableValue(playedCard);
+        let buildValue: number;
+        
         builtPiles.forEach(p => {
           buildCards = [...buildCards, ...p.cards];
         });
         
-        // Calculate build value from played card's hand value
-        const buildValue = getHandValue(playedCard);
+        // If building on existing build, calculate up/down based on direction
+        if (builtPiles.length === 1 && builtPiles[0].isBuild && builtPiles[0].buildValue) {
+          const existingValue = builtPiles[0].buildValue;
+          if (action.buildDirection === 'up') {
+            buildValue = existingValue + playedCardTableValue;
+          } else if (action.buildDirection === 'down') {
+            buildValue = Math.abs(existingValue - playedCardTableValue);
+          } else {
+            // Default: use hand value if no direction specified (new build)
+            buildValue = getHandValue(playedCard);
+          }
+        } else {
+          // New build or building on single pile: use hand value or sum
+          const pilesSum = builtPiles.reduce((sum, p) => sum + getPileValue(p), 0);
+          buildValue = pilesSum + playedCardTableValue;
+        }
         
         // Remove old piles
         newTable = newTable.filter(p => !targetPileIds.includes(p.id));
@@ -387,19 +404,73 @@ const App: React.FC = () => {
       dispatch({ type: 'PLAYER_MOVE', moveType: 'discard', playedCardId: state.selectedHandCardId, targetPileIds: [] });
   };
 
-  const handleBuild = () => {
+  const handleBuildUp = () => {
       if (!state.selectedHandCardId) return;
       const handCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
       if (!handCard) return;
 
       const selectedPiles = state.table.filter(p => state.selectedTablePileIds.includes(p.id));
-      const buildValue = canBuild(handCard, selectedPiles, state.player.hand);
       
-      if (buildValue) {
-          dispatch({ type: 'PLAYER_MOVE', moveType: 'build', playedCardId: handCard.id, targetPileIds: state.selectedTablePileIds });
+      // Calculate what the build value would be
+      let targetValue: number;
+      if (selectedPiles.length === 1 && selectedPiles[0].isBuild && selectedPiles[0].buildValue) {
+          targetValue = selectedPiles[0].buildValue + getTableValue(handCard);
       } else {
-          alert("Invalid Build! You need a reservation card in hand.");
+          const pilesSum = selectedPiles.reduce((sum, p) => sum + getPileValue(p), 0);
+          targetValue = pilesSum + getTableValue(handCard);
       }
+      
+      // Check reservation
+      const hasReservation = state.player.hand.some(c => 
+          c.id !== handCard.id && getHandValue(c) === targetValue
+      );
+      
+      if (!hasReservation) {
+          alert(`Invalid Build Up! You need a reservation card with value ${targetValue} in hand.`);
+          return;
+      }
+      
+      dispatch({ 
+          type: 'PLAYER_MOVE', 
+          moveType: 'build', 
+          playedCardId: handCard.id, 
+          targetPileIds: state.selectedTablePileIds,
+          buildDirection: 'up'
+      });
+  };
+
+  const handleBuildDown = () => {
+      if (!state.selectedHandCardId) return;
+      const handCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
+      if (!handCard) return;
+
+      const selectedPiles = state.table.filter(p => state.selectedTablePileIds.includes(p.id));
+      
+      if (selectedPiles.length !== 1 || !selectedPiles[0].isBuild || !selectedPiles[0].buildValue) {
+          alert("Build Down only works on existing builds!");
+          return;
+      }
+      
+      const existingValue = selectedPiles[0].buildValue;
+      const targetValue = Math.abs(existingValue - getTableValue(handCard));
+      
+      // Check reservation
+      const hasReservation = state.player.hand.some(c => 
+          c.id !== handCard.id && getHandValue(c) === targetValue
+      );
+      
+      if (!hasReservation) {
+          alert(`Invalid Build Down! You need a reservation card with value ${targetValue} in hand.`);
+          return;
+      }
+      
+      dispatch({ 
+          type: 'PLAYER_MOVE', 
+          moveType: 'build', 
+          playedCardId: handCard.id, 
+          targetPileIds: state.selectedTablePileIds,
+          buildDirection: 'down'
+      });
   };
 
   const handleTrotta = () => {
@@ -436,7 +507,25 @@ const App: React.FC = () => {
   const selectedCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
   const selectedPiles = state.table.filter(p => state.selectedTablePileIds.includes(p.id));
   const canPerformCapture = selectedCard && selectedPiles.length > 0 && canCapture(selectedCard, selectedPiles);
-  const canPerformBuild = selectedCard && canBuild(selectedCard, selectedPiles, state.player.hand) !== null;
+  
+  // Build Up: Check if we can build with any selected piles
+  const canPerformBuildUp = selectedCard && selectedPiles.length > 0 && (() => {
+      let targetValue: number;
+      if (selectedPiles.length === 1 && selectedPiles[0].isBuild && selectedPiles[0].buildValue) {
+          targetValue = selectedPiles[0].buildValue + getTableValue(selectedCard);
+      } else {
+          const pilesSum = selectedPiles.reduce((sum, p) => sum + getPileValue(p), 0);
+          targetValue = pilesSum + getTableValue(selectedCard);
+      }
+      return state.player.hand.some(c => c.id !== selectedCard.id && getHandValue(c) === targetValue);
+  })();
+  
+  // Build Down: Only on existing builds
+  const canPerformBuildDown = selectedCard && selectedPiles.length === 1 && 
+      selectedPiles[0].isBuild && selectedPiles[0].buildValue && (() => {
+          const targetValue = Math.abs(selectedPiles[0].buildValue - getTableValue(selectedCard));
+          return state.player.hand.some(c => c.id !== selectedCard.id && getHandValue(c) === targetValue);
+      })();
   
   // Trötta: Check if any piles on table match card's table value
   const canPerformTrotta = selectedCard && state.table.some(p => {
@@ -534,28 +623,35 @@ const App: React.FC = () => {
                     <button 
                         disabled={!canPerformCapture}
                         onClick={handleCapture}
-                        className={`px-4 py-2 rounded font-bold uppercase tracking-wider transition-colors text-sm ${canPerformCapture ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                        className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${canPerformCapture ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
                     >
                         Capture
                     </button>
                     <button 
-                        disabled={!canPerformBuild}
-                        onClick={handleBuild}
-                        className={`px-4 py-2 rounded font-bold uppercase tracking-wider transition-colors text-sm ${canPerformBuild ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                        disabled={!canPerformBuildUp}
+                        onClick={handleBuildUp}
+                        className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${canPerformBuildUp ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
                     >
-                        Build
+                        Bygg Upp
+                    </button>
+                    <button 
+                        disabled={!canPerformBuildDown}
+                        onClick={handleBuildDown}
+                        className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${canPerformBuildDown ? 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                    >
+                        Bygg Ner
                     </button>
                     <button 
                         disabled={!canPerformTrotta}
                         onClick={handleTrotta}
-                        className={`px-4 py-2 rounded font-bold uppercase tracking-wider transition-colors text-sm ${canPerformTrotta ? 'bg-purple-500 hover:bg-purple-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                        className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${canPerformTrotta ? 'bg-purple-500 hover:bg-purple-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
                     >
                         Trötta
                     </button>
                     <button 
                          disabled={!state.selectedHandCardId}
                          onClick={handleDiscard}
-                         className={`px-4 py-2 rounded font-bold uppercase tracking-wider transition-colors text-sm ${state.selectedHandCardId && state.selectedTablePileIds.length === 0 ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                         className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${state.selectedHandCardId && state.selectedTablePileIds.length === 0 ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
                     >
                         Discard
                     </button>
