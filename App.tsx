@@ -536,50 +536,68 @@ const App: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col h-screen max-w-6xl mx-auto p-4 gap-4">
-      <div className="flex justify-between items-start bg-emerald-900/50 p-4 rounded-lg backdrop-blur-sm border border-emerald-700">
-        <div>
-          <h2 className="text-xl font-bold text-emerald-100">Opponent</h2>
-          <div className="text-sm text-emerald-300 space-x-3">
-             <span>Mulles: {state.opponent.score.mullePoints}</span>
-             <span>Intake: {state.opponent.score.intakePoints}</span>
-             <span>Bonus: {state.opponent.score.bonus}</span>
-             <span className="font-bold text-white">Total: {state.opponent.score.total}</span>
+    <div className="flex flex-col h-screen max-w-7xl mx-auto p-4 gap-4 bg-gradient-to-br from-emerald-950 to-emerald-900">
+      <div className="flex justify-between items-start bg-gradient-to-r from-emerald-900/80 to-emerald-800/80 p-6 rounded-2xl backdrop-blur-sm border-2 border-emerald-700/50 shadow-2xl">
+        <div className="flex-1">
+          <h2 className="text-2xl font-bold text-emerald-100 mb-2 flex items-center gap-2">
+            <span className="text-3xl">🤖</span>
+            <span>Motståndare</span>
+          </h2>
+          <div className="text-sm text-emerald-300 grid grid-cols-2 gap-x-4 gap-y-1">
+             <span className="font-semibold">🎯 Mulles:</span><span className="text-yellow-300">{state.opponent.score.mullePoints}</span>
+             <span className="font-semibold">📊 Intake:</span><span>{state.opponent.score.intakePoints}</span>
+             <span className="font-semibold">⭐ Bonus:</span><span>{state.opponent.score.bonus}</span>
+             <span className="font-semibold text-white">💯 Total:</span><span className="text-xl font-bold text-white">{state.opponent.score.total}</span>
           </div>
         </div>
         
-        <div className="text-center">
-            <h1 className="text-3xl font-black text-yellow-400 tracking-wider uppercase drop-shadow-md">Mulle</h1>
-            <div className="text-xs text-emerald-400">Cards left: {state.deck.length}</div>
+        <div className="text-center px-8">
+            <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 tracking-wider uppercase drop-shadow-2xl mb-2">Mulle</h1>
+            <div className="flex items-center justify-center gap-3 text-sm">
+              <div className="bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-600">
+                <span className="text-emerald-400">🃏 Kvar: </span>
+                <span className="text-white font-bold">{state.deck.length}</span>
+              </div>
+              <div className="bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-600">
+                <span className="text-emerald-400">{state.turn === 'player' ? '👤 Din tur' : '🤖 AI:s tur'}</span>
+              </div>
+            </div>
         </div>
 
-        <div className="text-right">
-          <h2 className="text-xl font-bold text-emerald-100">You</h2>
-          <div className="text-sm text-emerald-300 space-x-3">
-             <span>Mulles: {state.player.score.mullePoints}</span>
-             <span>Intake: {state.player.score.intakePoints}</span>
-             <span>Bonus: {state.player.score.bonus}</span>
-             <span className="font-bold text-white">Total: {state.player.score.total}</span>
+        <div className="flex-1 text-right">
+          <h2 className="text-2xl font-bold text-emerald-100 mb-2 flex items-center gap-2 justify-end">
+            <span>Du</span>
+            <span className="text-3xl">👤</span>
+          </h2>
+          <div className="text-sm text-emerald-300 grid grid-cols-2 gap-x-4 gap-y-1">
+             <span className="font-semibold">🎯 Mulles:</span><span className="text-yellow-300">{state.player.score.mullePoints}</span>
+             <span className="font-semibold">📊 Intake:</span><span>{state.player.score.intakePoints}</span>
+             <span className="font-semibold">⭐ Bonus:</span><span>{state.player.score.bonus}</span>
+             <span className="font-semibold text-white">💯 Total:</span><span className="text-xl font-bold text-white">{state.player.score.total}</span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col relative bg-emerald-800 rounded-xl border-8 border-emerald-900 shadow-inner overflow-hidden">
+      <div className="flex-1 flex flex-col relative bg-gradient-to-br from-emerald-800 to-emerald-900 rounded-3xl border-8 border-emerald-950 shadow-2xl overflow-hidden">
         
-        <div className="h-32 flex items-center justify-center -space-x-4 pt-4">
+        <div className="h-32 flex items-center justify-center -space-x-4 pt-4 bg-gradient-to-b from-emerald-950/30 to-transparent">
            {state.opponent.hand.map((card, i) => (
-             <div key={card.id} style={{ transform: `rotate(${(i - state.opponent.hand.length/2) * 5}deg)` }}>
+             <div key={card.id} style={{ transform: `rotate(${(i - state.opponent.hand.length/2) * 5}deg)` }} className="transition-transform hover:scale-105">
                 <CardComponent isSmall={false} />
              </div>
            ))}
         </div>
 
-        <div className="flex-1 flex flex-wrap content-center justify-center gap-4 p-8">
+        <div className="flex-1 flex flex-wrap content-center justify-center gap-6 p-8">
             {state.table.map(pile => (
                 <div 
                     key={pile.id} 
                     onClick={() => handleTablePileClick(pile.id)}
-                    className={`relative group cursor-pointer transition-transform ${state.selectedTablePileIds.includes(pile.id) ? 'scale-110' : ''}`}
+                    className={`relative group cursor-pointer transition-all duration-200 ${
+                        state.selectedTablePileIds.includes(pile.id) 
+                            ? 'scale-110 drop-shadow-2xl ring-4 ring-yellow-400' 
+                            : 'hover:scale-105 hover:drop-shadow-xl'
+                    }`}
                 >
                     <div className="relative w-20 h-28">
                          {pile.cards.map((c, i) => (
@@ -590,102 +608,140 @@ const App: React.FC = () => {
                     </div>
                     
                     {/* Badge for Build Info or Sum */}
-                    <div className={`absolute -bottom-6 w-full text-center text-xs font-bold rounded px-1 ${pile.isBuild ? 'bg-yellow-600 text-white' : 'bg-black/30 text-emerald-200'}`}>
-                        {pile.isBuild ? `Build: ${pile.buildValue}` : `Sum: ${getPileValue(pile)}`}
+                    <div className={`absolute -bottom-7 w-full text-center text-xs font-bold rounded-lg px-2 py-1 shadow-lg ${
+                        pile.isBuild 
+                            ? 'bg-gradient-to-r from-yellow-600 to-yellow-500 text-white border border-yellow-400' 
+                            : 'bg-black/60 text-emerald-200 border border-emerald-600'
+                    }`}>
+                        {pile.isBuild ? `🏗️ Bygg: ${pile.buildValue}` : `Σ ${getPileValue(pile)}`}
+                        {pile.isLocked && <span className="ml-1">🔒</span>}
                     </div>
                 </div>
             ))}
             {state.table.length === 0 && (
-                <div className="text-emerald-500/30 text-4xl font-bold uppercase tracking-widest select-none">
-                    Empty Table
+                <div className="text-emerald-500/40 text-5xl font-bold uppercase tracking-widest select-none flex flex-col items-center gap-2">
+                    <span className="text-6xl">🎴</span>
+                    <span>Tomt Bord</span>
                 </div>
             )}
         </div>
 
-        <div className="h-40 flex items-center justify-center space-x-2 pb-4 px-4 bg-gradient-to-t from-emerald-900 to-transparent">
+        <div className="h-44 flex items-center justify-center space-x-3 pb-4 px-4 bg-gradient-to-t from-emerald-950/50 via-emerald-900/30 to-transparent">
             {state.player.hand.map((card) => (
-                <div key={card.id} className="hover:z-10 transition-transform hover:-translate-y-4">
+                <div key={card.id} className="relative hover:z-10 transition-all duration-200 hover:-translate-y-6 hover:scale-110">
                     <CardComponent 
                         card={card} 
                         isSelected={state.selectedHandCardId === card.id}
                         onClick={() => handleCardClick(card.id)}
                     />
-                     <div className="text-center text-[10px] mt-1 text-emerald-300">
-                        val: {getHandValue(card)}
+                     <div className={`text-center text-[10px] mt-1 font-semibold ${
+                         state.selectedHandCardId === card.id 
+                             ? 'text-yellow-300 scale-110' 
+                             : 'text-emerald-400'
+                     }`}>
+                        värde: {getHandValue(card)}
                     </div>
                 </div>
             ))}
         </div>
 
-        <div className="absolute bottom-40 left-1/2 transform -translate-x-1/2 flex gap-4 pointer-events-none">
+        <div className="absolute bottom-44 left-1/2 transform -translate-x-1/2 flex gap-2 pointer-events-none">
              {state.turn === 'player' && (
-                 <div className="pointer-events-auto flex gap-2 bg-black/50 p-2 rounded-lg backdrop-blur">
+                 <div className="pointer-events-auto flex gap-2 bg-gradient-to-br from-black/70 to-black/50 p-3 rounded-2xl backdrop-blur-md border-2 border-emerald-700/50 shadow-2xl">
                     <button 
                         disabled={!canPerformCapture}
                         onClick={handleCapture}
-                        className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${canPerformCapture ? 'bg-yellow-500 hover:bg-yellow-400 text-black shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                        className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                            canPerformCapture 
+                                ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black shadow-lg hover:shadow-yellow-500/50 hover:scale-105' 
+                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
                     >
-                        Capture
+                        <span>🎯</span>Fånga
                     </button>
                     <button 
                         disabled={!canPerformBuildUp}
                         onClick={handleBuildUp}
-                        className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${canPerformBuildUp ? 'bg-blue-500 hover:bg-blue-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                        className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                            canPerformBuildUp 
+                                ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white shadow-lg hover:shadow-blue-500/50 hover:scale-105' 
+                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
                     >
-                        Bygg Upp
+                        <span>⬆️</span>Bygg↑
                     </button>
                     <button 
                         disabled={!canPerformBuildDown}
                         onClick={handleBuildDown}
-                        className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${canPerformBuildDown ? 'bg-cyan-500 hover:bg-cyan-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                        className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                            canPerformBuildDown 
+                                ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white shadow-lg hover:shadow-cyan-500/50 hover:scale-105' 
+                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
                     >
-                        Bygg Ner
+                        <span>⬇️</span>Bygg↓
                     </button>
                     <button 
                         disabled={!canPerformTrotta}
                         onClick={handleTrotta}
-                        className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${canPerformTrotta ? 'bg-purple-500 hover:bg-purple-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                        className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                            canPerformTrotta 
+                                ? 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white shadow-lg hover:shadow-purple-500/50 hover:scale-105' 
+                                : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                        }`}
                     >
-                        Trötta
+                        <span>🔗</span>Trötta
                     </button>
                     <button 
                          disabled={!state.selectedHandCardId}
                          onClick={handleDiscard}
-                         className={`px-3 py-2 rounded font-bold uppercase tracking-wider transition-colors text-xs ${state.selectedHandCardId && state.selectedTablePileIds.length === 0 ? 'bg-red-500 hover:bg-red-400 text-white shadow-lg' : 'bg-gray-600 text-gray-400 cursor-not-allowed'}`}
+                         className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                             state.selectedHandCardId && state.selectedTablePileIds.length === 0 
+                                 ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white shadow-lg hover:shadow-red-500/50 hover:scale-105' 
+                                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
+                         }`}
                     >
-                        Discard
+                        <span>🗑️</span>Släng
                     </button>
                  </div>
              )}
         </div>
 
         {state.gameOver && (
-            <div className="absolute inset-0 z-50 bg-black/80 flex items-center justify-center">
-                <div className="bg-emerald-800 border-2 border-yellow-500 p-8 rounded-xl text-center max-w-md shadow-2xl">
-                    <h2 className="text-4xl font-bold text-yellow-400 mb-6">Game Over</h2>
+            <div className="absolute inset-0 z-50 bg-black/90 backdrop-blur-sm flex items-center justify-center">
+                <div className="bg-gradient-to-br from-emerald-800 to-emerald-900 border-4 border-yellow-500 p-10 rounded-3xl text-center max-w-xl shadow-2xl">
+                    <h2 className="text-6xl font-bold text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 to-yellow-600 mb-8 animate-pulse">🏆 Spel Slut! 🏆</h2>
                     
-                    <div className="grid grid-cols-2 gap-8 mb-8 text-left">
-                        <div>
-                            <h3 className="text-lg font-bold border-b border-emerald-600 mb-2">You</h3>
-                            <p>Mulles: {state.player.score.mullePoints}</p>
-                            <p>Tabbes: {state.player.score.tabbePoints}</p>
-                            <p>Bonus: {state.player.score.bonus}</p>
-                            <p className="text-2xl font-bold mt-2 text-white">{state.player.score.total}</p>
+                    <div className="grid grid-cols-2 gap-10 mb-10 text-left">
+                        <div className="bg-emerald-950/50 p-6 rounded-2xl border-2 border-emerald-600">
+                            <h3 className="text-2xl font-bold border-b-2 border-emerald-600 mb-4 pb-2 flex items-center gap-2">
+                                <span>👤</span> Du
+                            </h3>
+                            <div className="space-y-2 text-emerald-200">
+                                <p className="flex justify-between"><span>🎯 Mulles:</span><span className="text-yellow-300 font-bold">{state.player.score.mullePoints}</span></p>
+                                <p className="flex justify-between"><span>🎴 Tabbes:</span><span className="text-white font-bold">{state.player.score.tabbePoints}</span></p>
+                                <p className="flex justify-between"><span>⭐ Bonus:</span><span className="text-white font-bold">{state.player.score.bonus}</span></p>
+                                <p className="text-3xl font-bold mt-4 pt-4 border-t-2 border-emerald-600 text-center text-white">{state.player.score.total}</p>
+                            </div>
                         </div>
-                        <div>
-                            <h3 className="text-lg font-bold border-b border-emerald-600 mb-2">Opponent</h3>
-                            <p>Mulles: {state.opponent.score.mullePoints}</p>
-                            <p>Tabbes: {state.opponent.score.tabbePoints}</p>
-                            <p>Bonus: {state.opponent.score.bonus}</p>
-                            <p className="text-2xl font-bold mt-2 text-white">{state.opponent.score.total}</p>
+                        <div className="bg-emerald-950/50 p-6 rounded-2xl border-2 border-emerald-600">
+                            <h3 className="text-2xl font-bold border-b-2 border-emerald-600 mb-4 pb-2 flex items-center gap-2">
+                                <span>🤖</span> Motståndare
+                            </h3>
+                            <div className="space-y-2 text-emerald-200">
+                                <p className="flex justify-between"><span>🎯 Mulles:</span><span className="text-yellow-300 font-bold">{state.opponent.score.mullePoints}</span></p>
+                                <p className="flex justify-between"><span>🎴 Tabbes:</span><span className="text-white font-bold">{state.opponent.score.tabbePoints}</span></p>
+                                <p className="flex justify-between"><span>⭐ Bonus:</span><span className="text-white font-bold">{state.opponent.score.bonus}</span></p>
+                                <p className="text-3xl font-bold mt-4 pt-4 border-t-2 border-emerald-600 text-center text-white">{state.opponent.score.total}</p>
+                            </div>
                         </div>
                     </div>
 
                     <button 
                         onClick={() => window.location.reload()}
-                        className="bg-yellow-500 text-black font-bold py-3 px-8 rounded hover:bg-yellow-400 transition-colors"
+                        className="bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black font-bold py-4 px-10 rounded-2xl transition-all duration-200 text-lg shadow-lg hover:shadow-yellow-500/50 hover:scale-105"
                     >
-                        Play Again
+                        🎮 Spela Igen
                     </button>
                 </div>
             </div>
@@ -693,12 +749,20 @@ const App: React.FC = () => {
 
       </div>
 
-      <div className="h-32 bg-black/40 rounded-lg p-2 overflow-y-auto border border-emerald-800/50">
-           <div className="text-xs font-bold text-emerald-500 uppercase mb-1 sticky top-0 bg-black/20 backdrop-blur w-full">Game Log</div>
-           <div className="flex flex-col-reverse">
+      <div className="h-36 bg-gradient-to-br from-black/60 to-black/40 rounded-2xl p-3 overflow-y-auto border-2 border-emerald-800/50 backdrop-blur-sm shadow-xl">
+           <div className="text-xs font-bold text-emerald-400 uppercase mb-2 sticky top-0 bg-gradient-to-r from-emerald-950/90 to-emerald-900/90 backdrop-blur px-2 py-1 rounded-lg w-full flex items-center gap-2">
+               <span>📜</span> Spelhistorik
+           </div>
+           <div className="flex flex-col-reverse space-y-reverse space-y-1">
                {state.logs.map((log) => (
-                   <div key={log.id} className={`text-sm py-0.5 ${log.type === 'alert' ? 'text-yellow-400 font-bold' : log.type === 'action' ? 'text-white' : 'text-emerald-300'}`}>
-                       <span className="opacity-50 text-[10px] mr-2">[{new Date(parseInt(log.id) || Date.now()).toLocaleTimeString().split(' ')[0]}]</span>
+                   <div key={log.id} className={`text-sm py-1 px-2 rounded ${
+                       log.type === 'alert' 
+                           ? 'text-yellow-400 font-bold bg-yellow-900/20' 
+                           : log.type === 'action' 
+                               ? 'text-white bg-emerald-900/30' 
+                               : 'text-emerald-300'
+                   }`}>
+                       <span className="opacity-60 text-[10px] mr-2">[{new Date(parseInt(log.id) || Date.now()).toLocaleTimeString().split(' ')[0]}]</span>
                        {log.message}
                    </div>
                ))}
