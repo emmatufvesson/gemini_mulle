@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useReducer } from 'react';
 import { GameState, Card, TablePile, PlayerState, GameLog, Suit, Rank } from './types';
-import { createDeck, getHandValue, getPileValue, getMullePoints, updatePlayerScore, canCapture, findBestMove, getTableValue, canBuild } from './services/gameLogic';
+import { createDeck, getHandValue, getPileValue, getMullePoints, updatePlayerScore, canCapture, findBestMove, getTableValue, canBuild, calculateMulleScore } from './services/gameLogic';
 import { INITIAL_TABLE_SIZE, HAND_SIZE, TOTAL_ROUNDS } from './constants';
 import CardComponent from './components/CardComponent';
 
@@ -104,23 +104,20 @@ const gameReducer = (state: GameState, action: Action): GameState => {
 
       if (moveType === 'capture') {
         const capturedPiles = state.table.filter(p => targetPileIds.includes(p.id));
-        let capturedCards: Card[] = [playedCard];
-        let mullePoints = 0;
+        let allInvolvedCards: Card[] = [playedCard];
         let tabbePoints = 0;
 
         capturedPiles.forEach(p => {
-          capturedCards = [...capturedCards, ...p.cards];
-          // Check for Mulle
-          // If capturing a pile that contains an identical card
-          const identicalCard = p.cards.find(c => c.suit === playedCard.suit && c.rank === playedCard.rank);
-          if (identicalCard) {
-              const pts = getMullePoints(identicalCard.rank);
-              mullePoints += pts;
-              newLogs.push({ id: Date.now().toString() + p.id, message: `MULLE! +${pts} points`, type: 'alert' });
-          }
+          allInvolvedCards = [...allInvolvedCards, ...p.cards];
         });
 
-        newPlayer.captured = [...newPlayer.captured, ...capturedCards];
+        // Calculate Points using centralized logic
+        const mullePts = calculateMulleScore(allInvolvedCards);
+        if (mullePts > 0) {
+            newLogs.push({ id: Date.now().toString() + 'pm', message: `MULLE! +${mullePts} points`, type: 'alert' });
+        }
+
+        newPlayer.captured = [...newPlayer.captured, ...allInvolvedCards];
         newTable = newTable.filter(p => !targetPileIds.includes(p.id));
 
         if (newTable.length === 0) {
@@ -128,12 +125,12 @@ const gameReducer = (state: GameState, action: Action): GameState => {
           newLogs.push({ id: Date.now() + 't', message: "TABBE! +1 point", type: 'alert' });
         }
 
-        newPlayer.score.mullePoints += mullePoints;
+        newPlayer.score.mullePoints += mullePts;
         newPlayer.score.tabbePoints += tabbePoints;
         newPlayer = updatePlayerScore(newPlayer);
         lastCapturer = 'player';
         
-        newLogs.push({ id: Date.now() + 'c', message: `You captured ${capturedCards.length - 1} cards.`, type: 'action' });
+        newLogs.push({ id: Date.now() + 'c', message: `You captured ${allInvolvedCards.length - 1} cards.`, type: 'action' });
 
       } else if (moveType === 'discard') {
         newTable.push({
@@ -142,12 +139,6 @@ const gameReducer = (state: GameState, action: Action): GameState => {
           isBuild: false
         });
         newLogs.push({ id: Date.now() + 'd', message: `You discarded ${playedCard.suit} ${playedCard.rank}.`, type: 'info' });
-      } else if (moveType === 'build') {
-         // Logic for Player Build (if implemented in UI)
-         // Assuming UI sends build move with targetPileIds
-         // This block handles the STATE update
-         // NOTE: The current UI logic in handleCapture/handleDiscard doesn't emit 'build' yet for Player, 
-         // but we add support here for completeness or future UI expansion.
       }
 
       return {
@@ -178,21 +169,19 @@ const gameReducer = (state: GameState, action: Action): GameState => {
 
       if (move.type === 'capture') {
          const capturedPiles = state.table.filter(p => move.pileIds.includes(p.id));
-         let capturedCards: Card[] = [playedCard];
-         let mullePoints = 0;
+         let allInvolvedCards: Card[] = [playedCard];
          let tabbePoints = 0;
 
          capturedPiles.forEach(p => {
-            capturedCards = [...capturedCards, ...p.cards];
-            // AI Mulle check
-            const identicalCard = p.cards.find(c => c.suit === playedCard.suit && c.rank === playedCard.rank);
-            if (identicalCard) {
-                mullePoints += getMullePoints(identicalCard.rank);
-                newLogs.push({ id: Date.now() + 'om' + p.id, message: `Opponent scored a Mulle!`, type: 'alert' });
-            }
+            allInvolvedCards = [...allInvolvedCards, ...p.cards];
          });
 
-         newOpponent.captured = [...newOpponent.captured, ...capturedCards];
+         const mullePts = calculateMulleScore(allInvolvedCards);
+         if (mullePts > 0) {
+             newLogs.push({ id: Date.now() + 'om', message: `Opponent Mulle! +${mullePts} pts`, type: 'alert' });
+         }
+
+         newOpponent.captured = [...newOpponent.captured, ...allInvolvedCards];
          newTable = newTable.filter(p => !move.pileIds.includes(p.id));
 
          if (newTable.length === 0) {
@@ -200,7 +189,7 @@ const gameReducer = (state: GameState, action: Action): GameState => {
              newLogs.push({ id: Date.now() + 'ot', message: "Opponent scored a Tabbe!", type: 'alert' });
          }
 
-         newOpponent.score.mullePoints += mullePoints;
+         newOpponent.score.mullePoints += mullePts;
          newOpponent.score.tabbePoints += tabbePoints;
          newOpponent = updatePlayerScore(newOpponent);
          lastCapturer = 'opponent';
@@ -236,7 +225,7 @@ const gameReducer = (state: GameState, action: Action): GameState => {
               cards: [playedCard],
               isBuild: false
           });
-          newLogs.push({ id: Date.now() + 'od', message: `Opponent discarded.`, type: 'info' });
+          newLogs.push({ id: Date.now() + 'od', message: `Opponent discarded ${playedCard.rank}.`, type: 'info' });
       }
 
       return {
@@ -333,7 +322,7 @@ const App: React.FC = () => {
       if (canCapture(handCard, selectedPiles)) {
           dispatch({ type: 'PLAYER_MOVE', moveType: 'capture', playedCardId: handCard.id, targetPileIds: state.selectedTablePileIds });
       } else {
-          alert("Invalid Capture!");
+          alert("Invalid Capture! Check sums or special card rules.");
       }
   };
 
