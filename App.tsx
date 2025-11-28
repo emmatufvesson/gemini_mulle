@@ -536,8 +536,8 @@ const App: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col h-screen max-w-7xl mx-auto p-4 gap-4 bg-gradient-to-br from-emerald-950 to-emerald-900">
-      <div className="flex justify-between items-start bg-gradient-to-r from-emerald-900/80 to-emerald-800/80 p-6 rounded-2xl backdrop-blur-sm border-2 border-emerald-700/50 shadow-2xl">
+    <div className="flex flex-col h-screen max-w-7xl mx-auto p-2 sm:p-4 gap-3 sm:gap-4 bg-gradient-to-br from-emerald-950 to-emerald-900">
+      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start bg-gradient-to-r from-emerald-900/80 to-emerald-800/80 p-3 sm:p-6 rounded-2xl backdrop-blur-sm border-2 border-emerald-700/50 shadow-2xl gap-3">
         <div className="flex-1">
           <h2 className="text-2xl font-bold text-emerald-100 mb-2 flex items-center gap-2">
             <span className="text-3xl">🤖</span>
@@ -552,7 +552,7 @@ const App: React.FC = () => {
         </div>
         
         <div className="text-center px-8">
-            <h1 className="text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 tracking-wider uppercase drop-shadow-2xl mb-2">Mulle</h1>
+            <h1 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 tracking-wider uppercase drop-shadow-2xl mb-2">Mulle</h1>
             <div className="flex items-center justify-center gap-3 text-sm">
               <div className="bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-600">
                 <span className="text-emerald-400">🃏 Kvar: </span>
@@ -588,7 +588,7 @@ const App: React.FC = () => {
            ))}
         </div>
 
-        <div className="flex-1 flex flex-wrap content-center justify-center gap-6 p-8">
+        <div className="flex-1 flex flex-wrap content-center justify-center gap-3 sm:gap-6 p-3 sm:p-8">
             {state.table.map(pile => (
                 <div 
                     key={pile.id} 
@@ -599,7 +599,7 @@ const App: React.FC = () => {
                             : 'hover:scale-105 hover:drop-shadow-xl'
                     }`}
                 >
-                    <div className="relative w-20 h-28">
+                    <div className="relative w-16 h-24 sm:w-20 sm:h-28">
                          {pile.cards.map((c, i) => (
                              <div key={c.id} className="absolute top-0 left-0 transition-all" style={{ top: i * 2, left: i * 2 }}>
                                  <CardComponent card={c} isSmall={false} isSelected={state.selectedTablePileIds.includes(pile.id) && i === pile.cards.length - 1} />
@@ -626,7 +626,7 @@ const App: React.FC = () => {
             )}
         </div>
 
-        <div className="h-44 flex items-center justify-center space-x-3 pb-4 px-4 bg-gradient-to-t from-emerald-950/50 via-emerald-900/30 to-transparent">
+        <div className="h-36 sm:h-44 flex items-center justify-center space-x-2 sm:space-x-3 pb-3 sm:pb-4 px-2 sm:px-4 bg-gradient-to-t from-emerald-950/50 via-emerald-900/30 to-transparent">
             {state.player.hand.map((card) => (
                 <div key={card.id} className="relative hover:z-10 transition-all duration-200 hover:-translate-y-6 hover:scale-110">
                     <CardComponent 
@@ -645,13 +645,13 @@ const App: React.FC = () => {
             ))}
         </div>
 
-        <div className="absolute bottom-44 left-1/2 transform -translate-x-1/2 flex gap-2 pointer-events-none">
+        <div className="absolute bottom-36 sm:bottom-44 left-1/2 transform -translate-x-1/2 flex gap-1 sm:gap-2 pointer-events-none">
              {state.turn === 'player' && (
-                 <div className="pointer-events-auto flex gap-2 bg-gradient-to-br from-black/70 to-black/50 p-3 rounded-2xl backdrop-blur-md border-2 border-emerald-700/50 shadow-2xl">
+             <div className="pointer-events-auto flex gap-1 sm:gap-2 bg-gradient-to-br from-black/70 to-black/50 p-2 sm:p-3 rounded-2xl backdrop-blur-md border-2 border-emerald-700/50 shadow-2xl">
                     <button 
                         disabled={!canPerformCapture}
                         onClick={handleCapture}
-                        className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                        className={`px-3 sm:px-4 py-2 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-[10px] sm:text-xs flex items-center gap-1 sm:gap-2 ${
                             canPerformCapture 
                                 ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black shadow-lg hover:shadow-yellow-500/50 hover:scale-105' 
                                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
@@ -662,7 +662,7 @@ const App: React.FC = () => {
                     <button 
                         disabled={!canPerformBuildUp}
                         onClick={handleBuildUp}
-                        className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                        className={`px-3 sm:px-4 py-2 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-[10px] sm:text-xs flex items-center gap-1 sm:gap-2 ${
                             canPerformBuildUp 
                                 ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white shadow-lg hover:shadow-blue-500/50 hover:scale-105' 
                                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
@@ -673,7 +673,7 @@ const App: React.FC = () => {
                     <button 
                         disabled={!canPerformBuildDown}
                         onClick={handleBuildDown}
-                        className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                        className={`px-3 sm:px-4 py-2 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-[10px] sm:text-xs flex items-center gap-1 sm:gap-2 ${
                             canPerformBuildDown 
                                 ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white shadow-lg hover:shadow-cyan-500/50 hover:scale-105' 
                                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
@@ -695,7 +695,7 @@ const App: React.FC = () => {
                     <button 
                          disabled={!state.selectedHandCardId}
                          onClick={handleDiscard}
-                         className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                         className={`px-3 sm:px-4 py-2 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-[10px] sm:text-xs flex items-center gap-1 sm:gap-2 ${
                              state.selectedHandCardId && state.selectedTablePileIds.length === 0 
                                  ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white shadow-lg hover:shadow-red-500/50 hover:scale-105' 
                                  : 'bg-gray-700 text-gray-500 cursor-not-allowed'

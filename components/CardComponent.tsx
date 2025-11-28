@@ -14,7 +14,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, isSelected, isSmall
   if (!card) {
     return (
       <div 
-        className={`relative ${isSmall ? 'w-10 h-14' : 'w-20 h-28'} bg-blue-800 rounded border-2 border-white shadow-md flex items-center justify-center cursor-default ${className}`}
+        className={`relative ${isSmall ? 'w-9 h-12 sm:w-10 sm:h-14' : 'w-16 h-24 sm:w-20 sm:h-28'} bg-blue-800 rounded border-2 border-white shadow-md flex items-center justify-center cursor-default ${className}`}
       >
         <div className="w-full h-full border border-blue-600 rounded opacity-50 bg-[url('https://www.transparenttextures.com/patterns/cubes.png')]"></div>
       </div>
@@ -27,7 +27,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, isSelected, isSmall
     <div
       onClick={onClick}
       className={`
-        relative ${isSmall ? 'w-10 h-14 text-xs' : 'w-20 h-28 text-base'} 
+        relative ${isSmall ? 'w-9 h-12 text-[10px] sm:w-10 sm:h-14 sm:text-xs' : 'w-16 h-24 text-sm sm:w-20 sm:h-28 sm:text-base'} 
         bg-white rounded border-2 shadow-md flex flex-col items-center justify-between p-1 cursor-pointer transition-all duration-200
         ${isSelected ? 'border-yellow-400 -translate-y-2 ring-2 ring-yellow-400' : 'border-gray-300 hover:-translate-y-1'}
         ${className}
@@ -40,7 +40,7 @@ const CardComponent: React.FC<CardProps> = ({ card, onClick, isSelected, isSmall
       </div>
 
       {/* Center Big */}
-      <div className={`text-2xl ${isRed ? 'text-red-600' : 'text-black'}`}>
+      <div className={`text-xl sm:text-2xl ${isRed ? 'text-red-600' : 'text-black'}`}>
         {SUIT_SYMBOLS[card.suit]}
       </div>
 
