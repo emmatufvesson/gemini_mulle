@@ -536,59 +536,49 @@ const App: React.FC = () => {
   });
 
   return (
-    <div className="flex flex-col h-screen max-w-7xl mx-auto p-2 sm:p-4 gap-3 sm:gap-4 bg-gradient-to-br from-emerald-950 to-emerald-900">
-      <div className="flex flex-col sm:flex-row sm:justify-between sm:items-start bg-gradient-to-r from-emerald-900/80 to-emerald-800/80 p-3 sm:p-6 rounded-2xl backdrop-blur-sm border-2 border-emerald-700/50 shadow-2xl gap-3">
+    <div className="flex flex-col h-screen mx-auto p-1 gap-1 bg-gradient-to-br from-emerald-950 to-emerald-900">
+      <div className="flex justify-between items-center bg-gradient-to-r from-emerald-900/80 to-emerald-800/80 p-2 rounded-lg backdrop-blur-sm border border-emerald-700/50 shadow-xl text-xs">
         <div className="flex-1">
-          <h2 className="text-2xl font-bold text-emerald-100 mb-2 flex items-center gap-2">
-            <span className="text-3xl">🤖</span>
-            <span>Motståndare</span>
-          </h2>
-          <div className="text-sm text-emerald-300 grid grid-cols-2 gap-x-4 gap-y-1">
-             <span className="font-semibold">🎯 Mulles:</span><span className="text-yellow-300">{state.opponent.score.mullePoints}</span>
-             <span className="font-semibold">📊 Intake:</span><span>{state.opponent.score.intakePoints}</span>
-             <span className="font-semibold">⭐ Bonus:</span><span>{state.opponent.score.bonus}</span>
-             <span className="font-semibold text-white">💯 Total:</span><span className="text-xl font-bold text-white">{state.opponent.score.total}</span>
+          <div className="font-bold text-emerald-100 mb-1">🤖 Motståndare</div>
+          <div className="grid grid-cols-2 gap-x-2 text-[10px] text-emerald-300">
+             <span>🎯 Mulles:</span><span className="text-yellow-300">{state.opponent.score.mullePoints}</span>
+             <span>💯 Total:</span><span className="font-bold text-white">{state.opponent.score.total}</span>
           </div>
         </div>
         
-        <div className="text-center px-8">
-            <h1 className="text-3xl sm:text-5xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 tracking-wider uppercase drop-shadow-2xl mb-2">Mulle</h1>
-            <div className="flex items-center justify-center gap-3 text-sm">
-              <div className="bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-600">
-                <span className="text-emerald-400">🃏 Kvar: </span>
+        <div className="text-center px-2">
+            <h1 className="text-xl font-black text-transparent bg-clip-text bg-gradient-to-r from-yellow-400 via-yellow-300 to-yellow-500 tracking-wider uppercase">Mulle</h1>
+            <div className="flex items-center gap-1 text-[10px]">
+              <div className="bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-600">
+                <span className="text-emerald-400">🃏 </span>
                 <span className="text-white font-bold">{state.deck.length}</span>
               </div>
-              <div className="bg-emerald-950/50 px-3 py-1 rounded-full border border-emerald-600">
-                <span className="text-emerald-400">{state.turn === 'player' ? '👤 Din tur' : '🤖 AI:s tur'}</span>
+              <div className="bg-emerald-950/50 px-2 py-0.5 rounded-full border border-emerald-600">
+                <span className="text-emerald-400">{state.turn === 'player' ? '👤' : '🤖'}</span>
               </div>
             </div>
         </div>
 
         <div className="flex-1 text-right">
-          <h2 className="text-2xl font-bold text-emerald-100 mb-2 flex items-center gap-2 justify-end">
-            <span>Du</span>
-            <span className="text-3xl">👤</span>
-          </h2>
-          <div className="text-sm text-emerald-300 grid grid-cols-2 gap-x-4 gap-y-1">
-             <span className="font-semibold">🎯 Mulles:</span><span className="text-yellow-300">{state.player.score.mullePoints}</span>
-             <span className="font-semibold">📊 Intake:</span><span>{state.player.score.intakePoints}</span>
-             <span className="font-semibold">⭐ Bonus:</span><span>{state.player.score.bonus}</span>
-             <span className="font-semibold text-white">💯 Total:</span><span className="text-xl font-bold text-white">{state.player.score.total}</span>
+          <div className="font-bold text-emerald-100 mb-1">Du 👤</div>
+          <div className="grid grid-cols-2 gap-x-2 text-[10px] text-emerald-300">
+             <span>🎯 Mulles:</span><span className="text-yellow-300">{state.player.score.mullePoints}</span>
+             <span>💯 Total:</span><span className="font-bold text-white">{state.player.score.total}</span>
           </div>
         </div>
       </div>
 
-      <div className="flex-1 flex flex-col relative bg-gradient-to-br from-emerald-800 to-emerald-900 rounded-3xl border-8 border-emerald-950 shadow-2xl overflow-hidden">
+      <div className="flex-1 flex flex-col relative bg-gradient-to-br from-emerald-800 to-emerald-900 rounded-xl border-2 border-emerald-950 shadow-2xl overflow-hidden">
         
-        <div className="h-32 flex items-center justify-center -space-x-4 pt-4 bg-gradient-to-b from-emerald-950/30 to-transparent">
+        <div className="h-16 flex items-center justify-center -space-x-2 pt-1 bg-gradient-to-b from-emerald-950/30 to-transparent">
            {state.opponent.hand.map((card, i) => (
-             <div key={card.id} style={{ transform: `rotate(${(i - state.opponent.hand.length/2) * 5}deg)` }} className="transition-transform hover:scale-105">
-                <CardComponent isSmall={false} />
+             <div key={card.id} style={{ transform: `rotate(${(i - state.opponent.hand.length/2) * 3}deg)` }} className="transition-transform">
+                <CardComponent isSmall={true} />
              </div>
            ))}
         </div>
 
-        <div className="flex-1 flex flex-wrap content-center justify-center gap-3 sm:gap-6 p-3 sm:p-8">
+        <div className="flex-1 flex flex-wrap content-center justify-center gap-2 p-2">
             {state.table.map(pile => (
                 <div 
                     key={pile.id} 
@@ -599,9 +589,9 @@ const App: React.FC = () => {
                             : 'hover:scale-105 hover:drop-shadow-xl'
                     }`}
                 >
-                    <div className="relative w-16 h-24 sm:w-20 sm:h-28">
+                    <div className="relative w-12 h-16 sm:w-16 sm:h-24">
                          {pile.cards.map((c, i) => (
-                             <div key={c.id} className="absolute top-0 left-0 transition-all" style={{ top: i * 2, left: i * 2 }}>
+                             <div key={c.id} className="absolute top-0 left-0 transition-all" style={{ top: i * 1, left: i * 1 }}>
                                  <CardComponent card={c} isSmall={false} isSelected={state.selectedTablePileIds.includes(pile.id) && i === pile.cards.length - 1} />
                              </div>
                          ))}
@@ -626,82 +616,82 @@ const App: React.FC = () => {
             )}
         </div>
 
-        <div className="h-36 sm:h-44 flex items-center justify-center space-x-2 sm:space-x-3 pb-3 sm:pb-4 px-2 sm:px-4 bg-gradient-to-t from-emerald-950/50 via-emerald-900/30 to-transparent">
+        <div className="h-24 flex items-center justify-center space-x-1 pb-1 px-1 bg-gradient-to-t from-emerald-950/50 via-emerald-900/30 to-transparent">
             {state.player.hand.map((card) => (
-                <div key={card.id} className="relative hover:z-10 transition-all duration-200 hover:-translate-y-6 hover:scale-110">
+                <div key={card.id} className="relative hover:z-10 transition-all duration-200 hover:-translate-y-3 hover:scale-105">
                     <CardComponent 
                         card={card} 
                         isSelected={state.selectedHandCardId === card.id}
                         onClick={() => handleCardClick(card.id)}
                     />
-                     <div className={`text-center text-[10px] mt-1 font-semibold ${
+                     <div className={`text-center text-[8px] mt-0.5 font-semibold ${
                          state.selectedHandCardId === card.id 
                              ? 'text-yellow-300 scale-110' 
                              : 'text-emerald-400'
                      }`}>
-                        värde: {getHandValue(card)}
+                        {getHandValue(card)}
                     </div>
                 </div>
             ))}
         </div>
 
-        <div className="absolute bottom-36 sm:bottom-44 left-1/2 transform -translate-x-1/2 flex gap-1 sm:gap-2 pointer-events-none">
+        <div className="absolute bottom-24 left-1/2 transform -translate-x-1/2 flex gap-0.5 pointer-events-none">
              {state.turn === 'player' && (
-             <div className="pointer-events-auto flex gap-1 sm:gap-2 bg-gradient-to-br from-black/70 to-black/50 p-2 sm:p-3 rounded-2xl backdrop-blur-md border-2 border-emerald-700/50 shadow-2xl">
+                 <div className="pointer-events-auto flex gap-0.5 bg-gradient-to-br from-black/70 to-black/50 p-1 rounded-lg backdrop-blur-md border border-emerald-700/50 shadow-2xl">
                     <button 
                         disabled={!canPerformCapture}
                         onClick={handleCapture}
-                        className={`px-3 sm:px-4 py-2 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-[10px] sm:text-xs flex items-center gap-1 sm:gap-2 ${
+                        className={`px-2 py-1 rounded-md font-bold uppercase text-[8px] flex items-center gap-0.5 ${
                             canPerformCapture 
-                                ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 hover:from-yellow-400 hover:to-yellow-500 text-black shadow-lg hover:shadow-yellow-500/50 hover:scale-105' 
+                                ? 'bg-gradient-to-r from-yellow-500 to-yellow-600 text-black shadow-lg' 
                                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                         }`}
                     >
-                        <span>🎯</span>Fånga
+                        🎯
                     </button>
                     <button 
                         disabled={!canPerformBuildUp}
                         onClick={handleBuildUp}
-                        className={`px-3 sm:px-4 py-2 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-[10px] sm:text-xs flex items-center gap-1 sm:gap-2 ${
+                        className={`px-2 py-1 rounded-md font-bold uppercase text-[8px] flex items-center gap-0.5 ${
                             canPerformBuildUp 
-                                ? 'bg-gradient-to-r from-blue-500 to-blue-600 hover:from-blue-400 hover:to-blue-500 text-white shadow-lg hover:shadow-blue-500/50 hover:scale-105' 
+                                ? 'bg-gradient-to-r from-blue-500 to-blue-600 text-white shadow-lg' 
                                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                         }`}
                     >
-                        <span>⬆️</span>Bygg↑
+                        ⬆️
                     </button>
                     <button 
                         disabled={!canPerformBuildDown}
                         onClick={handleBuildDown}
-                        className={`px-3 sm:px-4 py-2 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-[10px] sm:text-xs flex items-center gap-1 sm:gap-2 ${
+                        className={`px-2 py-1 rounded-md font-bold uppercase text-[8px] flex items-center gap-0.5 ${
                             canPerformBuildDown 
-                                ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 hover:from-cyan-400 hover:to-cyan-500 text-white shadow-lg hover:shadow-cyan-500/50 hover:scale-105' 
+                                ? 'bg-gradient-to-r from-cyan-500 to-cyan-600 text-white shadow-lg' 
                                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                         }`}
                     >
-                        <span>⬇️</span>Bygg↓
+                        ⬇️
                     </button>
                     <button 
                         disabled={!canPerformTrotta}
                         onClick={handleTrotta}
-                        className={`px-4 py-2.5 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-xs flex items-center gap-2 ${
+                        className={`px-2 py-1 rounded-md font-bold uppercase text-[8px] flex items-center gap-0.5 ${
                             canPerformTrotta 
-                                ? 'bg-gradient-to-r from-purple-500 to-purple-600 hover:from-purple-400 hover:to-purple-500 text-white shadow-lg hover:shadow-purple-500/50 hover:scale-105' 
+                                ? 'bg-gradient-to-r from-purple-500 to-purple-600 text-white shadow-lg' 
                                 : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                         }`}
                     >
-                        <span>🔗</span>Trötta
+                        🔗
                     </button>
                     <button 
                          disabled={!state.selectedHandCardId}
                          onClick={handleDiscard}
-                         className={`px-3 sm:px-4 py-2 rounded-xl font-bold uppercase tracking-wide transition-all duration-200 text-[10px] sm:text-xs flex items-center gap-1 sm:gap-2 ${
+                         className={`px-2 py-1 rounded-md font-bold uppercase text-[8px] flex items-center gap-0.5 ${
                              state.selectedHandCardId && state.selectedTablePileIds.length === 0 
-                                 ? 'bg-gradient-to-r from-red-500 to-red-600 hover:from-red-400 hover:to-red-500 text-white shadow-lg hover:shadow-red-500/50 hover:scale-105' 
+                                 ? 'bg-gradient-to-r from-red-500 to-red-600 text-white shadow-lg' 
                                  : 'bg-gray-700 text-gray-500 cursor-not-allowed'
                          }`}
                     >
-                        <span>🗑️</span>Släng
+                        🗑️
                     </button>
                  </div>
              )}
@@ -749,20 +739,20 @@ const App: React.FC = () => {
 
       </div>
 
-      <div className="h-36 bg-gradient-to-br from-black/60 to-black/40 rounded-2xl p-3 overflow-y-auto border-2 border-emerald-800/50 backdrop-blur-sm shadow-xl">
-           <div className="text-xs font-bold text-emerald-400 uppercase mb-2 sticky top-0 bg-gradient-to-r from-emerald-950/90 to-emerald-900/90 backdrop-blur px-2 py-1 rounded-lg w-full flex items-center gap-2">
+      <div className="h-24 bg-gradient-to-br from-black/60 to-black/40 rounded-lg p-2 overflow-y-auto border border-emerald-800/50 backdrop-blur-sm shadow-xl">
+           <div className="text-[10px] font-bold text-emerald-400 uppercase mb-1 sticky top-0 bg-gradient-to-r from-emerald-950/90 to-emerald-900/90 backdrop-blur px-1 py-0.5 rounded-md w-full flex items-center gap-1">
                <span>📜</span> Spelhistorik
            </div>
-           <div className="flex flex-col-reverse space-y-reverse space-y-1">
+           <div className="flex flex-col-reverse space-y-reverse space-y-0.5">
                {state.logs.map((log) => (
-                   <div key={log.id} className={`text-sm py-1 px-2 rounded ${
+                   <div key={log.id} className={`text-[10px] py-0.5 px-1 rounded ${
                        log.type === 'alert' 
                            ? 'text-yellow-400 font-bold bg-yellow-900/20' 
                            : log.type === 'action' 
                                ? 'text-white bg-emerald-900/30' 
                                : 'text-emerald-300'
                    }`}>
-                       <span className="opacity-60 text-[10px] mr-2">[{new Date(parseInt(log.id) || Date.now()).toLocaleTimeString().split(' ')[0]}]</span>
+                       <span className="opacity-60 text-[8px] mr-1">[{new Date(parseInt(log.id) || Date.now()).toLocaleTimeString().split(' ')[0].slice(0,5)}]</span>
                        {log.message}
                    </div>
                ))}

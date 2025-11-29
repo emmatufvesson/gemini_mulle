@@ -146,15 +146,16 @@ export const canCapture = (handCard: Card, selectedPiles: TablePile[]): boolean 
   if (selectedPiles.length === 0) return false;
   const handVal = getHandValue(handCard);
 
-  // Special Rules for 14, 15, 16
+  // Special Rules for 14, 15, 16 (Rule 3.1)
+  // Can ONLY capture via builds - cannot combine loose cards
   if (handVal >= 14) {
-      // Must only target valid Special targets:
-      // 1. A Build with exactly that value.
-      // 2. An identical single card (Mulle).
+      // Must only target builds with exact value
+      // (Identical card for mulle is handled separately in game logic)
       const allValidTargets = selectedPiles.every(p => {
           if (p.isBuild && p.buildValue === handVal) return true;
           if (!p.isBuild && p.cards.length === 1) {
               const c = p.cards[0];
+              // Mulle: identical card (same suit + rank)
               if (c.suit === handCard.suit && c.rank === handCard.rank) return true;
           }
           return false;
@@ -162,7 +163,7 @@ export const canCapture = (handCard: Card, selectedPiles: TablePile[]): boolean 
       return allValidTargets;
   }
 
-  // Normal cards: Can capture any collection that partitions into the hand value
+  // Normal cards (1-13): Can capture any collection that partitions into the hand value
   return canPartition(selectedPiles, handVal);
 };
 
