@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useReducer } from 'react';
 import { GameState, Card, TablePile, PlayerState, GameLog, Suit, Rank } from './types';
-import { createDeck, getHandValue, getPileValue, getMullePoints, updatePlayerScore, canCapture, findBestMove, getTableValue, canBuild, calculateMulleScore, performBuild, canTrotta, performTrotta, findFeedTarget, performFeed, findIdenticalCard, calculateTableMulleTabbar, performCapture, findDiscardAbsorption } from './services/gameLogic';
+import { createDeck, getHandValue, getPileValue, getMullePoints, updatePlayerScore, canCapture, findBestMove, getTableValue, canBuild, calculateMulleScore, performBuild, canTrotta, performTrotta, findFeedTarget, performFeed, findIdenticalCard, calculateTableMulleTabbar, performCapture, findDiscardAbsorption, findCaptureCardForValue } from './services/gameLogic';
 import { INITIAL_TABLE_SIZE, HAND_SIZE, TOTAL_ROUNDS } from './constants';
 import CardComponent from './components/CardComponent';
 
@@ -198,7 +198,45 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         const absorbedCount = absorbedPileIds.length;
         const lockMsg = isLocked ? ' (locked)' : '';
         const absorbMsg = absorbedCount > 0 ? ` +${absorbedCount} absorbed` : '';
-        newLogs.push({ id: Date.now() + 'pb', message: `You built ${buildValue}${absorbMsg}${lockMsg}.`, type: 'info' });
+                newLogs.push({ id: Date.now() + 'pb', message: `You built ${buildValue}${absorbMsg}${lockMsg}.`, type: 'info' });
+
+                // Immediate capture requirement
+                const captureCard = findCaptureCardForValue(newPlayer.hand, buildValue);
+                if (!captureCard) {
+                    newLogs.push({ id: Date.now() + 'errb', message: `Rule: Build must be taken same turn but no capture card found. Build cancelled.`, type: 'alert' });
+                    // Rollback: remove build and restore absorbed piles (simplified: abort move)
+                    return state; // Should never happen due to button disable
+                }
+
+                // Remove capture card from hand
+                newPlayer.hand = newPlayer.hand.filter(c => c.id !== captureCard.id);
+
+                // Perform capture expansion (includes single combos)
+                const { allCapturedPiles } = performCapture(captureCard, [newPile], newTable);
+                let allInvolvedCards: Card[] = [captureCard];
+                allCapturedPiles.forEach(p => allInvolvedCards.push(...p.cards));
+
+                // Table-only cards for tabbar
+                const tableOnlyCards = allInvolvedCards.slice(1);
+                const tableMulleTabbar = calculateTableMulleTabbar(tableOnlyCards);
+                let tabbePoints = 0;
+                if (tableMulleTabbar > 0) {
+                    tabbePoints += tableMulleTabbar;
+                    newLogs.push({ id: Date.now() + 'tmbc', message: `Table Mulle! +${tableMulleTabbar} tabbar`, type: 'alert' });
+                }
+                const mullePts = calculateMulleScore(allInvolvedCards);
+                if (mullePts > 0) newLogs.push({ id: Date.now() + 'mbc', message: `MULLE! +${mullePts} points`, type: 'alert' });
+
+                newPlayer.captured = [...newPlayer.captured, ...allInvolvedCards];
+                newTable = newTable.filter(p => !allCapturedPiles.some(cp => cp.id === p.id));
+                if (newTable.length === 0) { tabbePoints += 1; newLogs.push({ id: Date.now() + 'tbc', message: 'TABBE! +1 point', type: 'alert' }); }
+                newPlayer.score.mullePoints += mullePts;
+                newPlayer.score.tabbePoints += tabbePoints;
+                newPlayer = updatePlayerScore(newPlayer);
+                lastCapturer = 'player';
+                const extraCount = allCapturedPiles.length - 1;
+                const extraMsg = extraCount > 0 ? ` +${extraCount} combos` : '';
+                newLogs.push({ id: Date.now() + 'cbc', message: `Build captured immediately with ${captureCard.rank}${extraMsg}.`, type: 'action' });
       } else if (moveType === 'trotta') {
         // Trotta with automatic consolidation
         const consolidatable = canTrotta(playedCard, state.table);
@@ -207,7 +245,30 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         newTable = newTable.filter(p => !consolidatable.some(c => c.id === p.id));
         newTable.push(trottaBuild);
         
-        newLogs.push({ id: Date.now() + 'ptr', message: `You tröttade ${trottaBuild.buildValue} (${trottaBuild.cards.length} cards, locked).`, type: 'action' });
+                newLogs.push({ id: Date.now() + 'ptr', message: `You tröttade ${trottaBuild.buildValue} (${trottaBuild.cards.length} cards, locked).`, type: 'action' });
+
+                // Immediate capture requirement for trotta
+                const captureCard = findCaptureCardForValue(newPlayer.hand, trottaBuild.buildValue, playedCard.id);
+                if (!captureCard) {
+                    newLogs.push({ id: Date.now() + 'errt', message: `Rule: Trotta must be taken same turn but no capture card found.`, type: 'alert' });
+                    return state; // Should not happen due to button disable
+                }
+                newPlayer.hand = newPlayer.hand.filter(c => c.id !== captureCard.id);
+                const { allCapturedPiles } = performCapture(captureCard, [trottaBuild], newTable);
+                let allInvolvedCards: Card[] = [captureCard];
+                allCapturedPiles.forEach(p => allInvolvedCards.push(...p.cards));
+                const tableOnlyCards = allInvolvedCards.slice(1);
+                const tableMulleTabbar = calculateTableMulleTabbar(tableOnlyCards);
+                let tabbePoints = 0;
+                if (tableMulleTabbar > 0) { tabbePoints += tableMulleTabbar; newLogs.push({ id: Date.now() + 'tmtt', message: `Table Mulle! +${tableMulleTabbar} tabbar`, type: 'alert' }); }
+                const mullePts = calculateMulleScore(allInvolvedCards);
+                if (mullePts > 0) newLogs.push({ id: Date.now() + 'mtt', message: `MULLE! +${mullePts} points`, type: 'alert' });
+                newPlayer.captured = [...newPlayer.captured, ...allInvolvedCards];
+                newTable = newTable.filter(p => !allCapturedPiles.some(cp => cp.id === p.id));
+                if (newTable.length === 0) { tabbePoints += 1; newLogs.push({ id: Date.now() + 'tabt', message: 'TABBE! +1 point', type: 'alert' }); }
+                newPlayer.score.mullePoints += mullePts; newPlayer.score.tabbePoints += tabbePoints; newPlayer = updatePlayerScore(newPlayer); lastCapturer = 'player';
+                const extraCount = allCapturedPiles.length - 1; const extraMsg = extraCount > 0 ? ` +${extraCount} combos` : '';
+                newLogs.push({ id: Date.now() + 'ctt', message: `Trotta captured immediately with ${captureCard.rank}${extraMsg}.`, type: 'action' });
       }
 
       return {
@@ -299,6 +360,28 @@ const gameReducer = (state: GameState, action: Action): GameState => {
                  const lockMsg = isLocked ? ' (locked)' : '';
                  newLogs.push({ id: Date.now() + 'ob', message: `Opponent built ${move.buildValue}${lockMsg}.`, type: 'info' });
 
+                 // Immediate capture chain
+                 const captureCard = findCaptureCardForValue(newOpponent.hand, move.buildValue!, playedCard.id);
+                 if (captureCard) {
+                     newOpponent.hand = newOpponent.hand.filter(c => c.id !== captureCard.id);
+                     const { allCapturedPiles } = performCapture(captureCard, [newPile], newTable);
+                     let allInvolvedCards: Card[] = [captureCard];
+                     allCapturedPiles.forEach(p => allInvolvedCards.push(...p.cards));
+                     const tableOnlyCards = allInvolvedCards.slice(1);
+                     let tabbePoints = 0;
+                     const tableMulleTabbar = calculateTableMulleTabbar(tableOnlyCards);
+                     if (tableMulleTabbar > 0) { tabbePoints += tableMulleTabbar; newLogs.push({ id: Date.now() + 'otmb', message: `Opponent Table Mulle! +${tableMulleTabbar} tabbar`, type: 'alert' }); }
+                     const mullePts = calculateMulleScore(allInvolvedCards);
+                     if (mullePts > 0) newLogs.push({ id: Date.now() + 'ombc', message: `Opponent Mulle! +${mullePts} pts`, type: 'alert' });
+                     newOpponent.captured = [...newOpponent.captured, ...allInvolvedCards];
+                     newTable = newTable.filter(p => !allCapturedPiles.some(cp => cp.id === p.id));
+                     if (newTable.length === 0) { tabbePoints += 1; newLogs.push({ id: Date.now() + 'otbc', message: 'Opponent scored a Tabbe!', type: 'alert' }); }
+                     newOpponent.score.mullePoints += mullePts; newOpponent.score.tabbePoints += tabbePoints; newOpponent = updatePlayerScore(newOpponent);
+                     lastCapturer = 'opponent';
+                     const extraCount = allCapturedPiles.length - 1; const extraMsg = extraCount > 0 ? ` +${extraCount} combos` : '';
+                     newLogs.push({ id: Date.now() + 'ocbc', message: `Opponent immediately captured build with ${captureCard.rank}${extraMsg}.`, type: 'info' });
+                 }
+
     } else if (move.type === 'trotta') {
        // Trotta
        const consolidatable = state.table.filter(p => move.pileIds.includes(p.id));
@@ -308,6 +391,28 @@ const gameReducer = (state: GameState, action: Action): GameState => {
        newTable.push(trottaBuild);
          
        newLogs.push({ id: Date.now() + 'otr', message: `Opponent tröttade ${trottaBuild.buildValue}.`, type: 'action' });
+
+       // Immediate capture chain for trotta
+       const captureCard = findCaptureCardForValue(newOpponent.hand, trottaBuild.buildValue, playedCard.id);
+       if (captureCard) {
+           newOpponent.hand = newOpponent.hand.filter(c => c.id !== captureCard.id);
+           const { allCapturedPiles } = performCapture(captureCard, [trottaBuild], newTable);
+           let allInvolvedCards: Card[] = [captureCard];
+           allCapturedPiles.forEach(p => allInvolvedCards.push(...p.cards));
+           const tableOnlyCards = allInvolvedCards.slice(1);
+           let tabbePoints = 0;
+           const tableMulleTabbar = calculateTableMulleTabbar(tableOnlyCards);
+           if (tableMulleTabbar > 0) { tabbePoints += tableMulleTabbar; newLogs.push({ id: Date.now() + 'otmt', message: `Opponent Table Mulle! +${tableMulleTabbar} tabbar`, type: 'alert' }); }
+           const mullePts = calculateMulleScore(allInvolvedCards);
+           if (mullePts > 0) newLogs.push({ id: Date.now() + 'omtt', message: `Opponent Mulle! +${mullePts} pts`, type: 'alert' });
+           newOpponent.captured = [...newOpponent.captured, ...allInvolvedCards];
+           newTable = newTable.filter(p => !allCapturedPiles.some(cp => cp.id === p.id));
+           if (newTable.length === 0) { tabbePoints += 1; newLogs.push({ id: Date.now() + 'ottt', message: 'Opponent scored a Tabbe!', type: 'alert' }); }
+           newOpponent.score.mullePoints += mullePts; newOpponent.score.tabbePoints += tabbePoints; newOpponent = updatePlayerScore(newOpponent);
+           lastCapturer = 'opponent';
+           const extraCount = allCapturedPiles.length - 1; const extraMsg = extraCount > 0 ? ` +${extraCount} combos` : '';
+           newLogs.push({ id: Date.now() + 'octt', message: `Opponent immediately captured trotta with ${captureCard.rank}${extraMsg}.`, type: 'info' });
+       }
 
       } else {
                     // Discard - check absorption first, then feed
@@ -566,22 +671,24 @@ const App: React.FC = () => {
           const pilesSum = selectedPiles.reduce((sum, p) => sum + getPileValue(p), 0);
           targetValue = pilesSum + getTableValue(selectedCard);
       }
-      return state.player.hand.some(c => c.id !== selectedCard.id && getHandValue(c) === targetValue);
+      return !!findCaptureCardForValue(state.player.hand, targetValue, selectedCard.id);
   })();
   
   // Build Down: Only on existing builds
   const canPerformBuildDown = selectedCard && selectedPiles.length === 1 && 
       selectedPiles[0].isBuild && selectedPiles[0].buildValue && (() => {
           const targetValue = Math.abs(selectedPiles[0].buildValue - getTableValue(selectedCard));
-          return state.player.hand.some(c => c.id !== selectedCard.id && getHandValue(c) === targetValue);
+          return !!findCaptureCardForValue(state.player.hand, targetValue, selectedCard.id);
       })();
   
   // Trötta: Check if any piles on table match card's table value
   const canPerformTrotta = selectedCard && state.table.some(p => {
       const pileValue = getPileValue(p);
       const trottaValue = getTableValue(selectedCard);
-      return (p.cards.length <= 2 && pileValue === trottaValue) || 
-             (p.isBuild && p.buildValue === trottaValue);
+      const hasTableMatch = (p.cards.length <= 2 && pileValue === trottaValue) || (p.isBuild && p.buildValue === trottaValue);
+      if (!hasTableMatch) return false;
+      // Need immediate capture card
+      return !!findCaptureCardForValue(state.player.hand, trottaValue, selectedCard.id);
   });
 
   return (

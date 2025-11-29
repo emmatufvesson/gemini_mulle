@@ -1,5 +1,5 @@
 import { Suit, Rank, Card, TablePile } from '../types';
-import { getHandValue, getTableValue, canCapture, performBuild, canTrotta, performTrotta, findBestMove, calculateTableMulleTabbar, performCapture, findDiscardAbsorption } from '../services/gameLogic';
+import { getHandValue, getTableValue, canCapture, performBuild, canTrotta, performTrotta, findBestMove, calculateTableMulleTabbar, performCapture, findDiscardAbsorption, findCaptureCardForValue } from '../services/gameLogic';
 
 
 // Helper to make a card
@@ -114,6 +114,33 @@ test('Discard 6 + table 1 absorbs into build 7', () => {
   assert(absorption !== null, 'Should detect absorption');
   assert(absorption!.build.id === build7.id, 'Should target build 7');
   assert(absorption!.single.id === pileAce.id, 'Should absorb ace single');
+});
+
+// Immediate capture rule tests
+test('Cannot find capture card for build value returns null helper', () => {
+  const h3 = card(Suit.HEARTS, Rank.THREE, 'h3');
+  const h4 = card(Suit.CLUBS, Rank.FOUR, 'h4');
+  const hand: Card[] = [h3]; // Only the building card
+  const capture = findCaptureCardForValue(hand, 7, h3.id);
+  assert(capture === null, 'Should not find capture card when none exists');
+});
+
+test('Helper finds capture card different from building card', () => {
+  const buildCard = card(Suit.HEARTS, Rank.THREE, 'h3');
+  const captureCard = card(Suit.DIAMONDS, Rank.SEVEN, 'd7');
+  const hand: Card[] = [buildCard, captureCard];
+  const found = findCaptureCardForValue(hand, 7, buildCard.id);
+  assert(found && found.id === captureCard.id, 'Expected to find 7 capture card');
+});
+
+test('Trotta requires capture card (helper logic)', () => {
+  const trottaCard = card(Suit.SPADES, Rank.FOUR, 't4');
+  const capture4 = card(Suit.HEARTS, Rank.FOUR, 'c4');
+  const table: TablePile[] = [singlePile(card(Suit.CLUBS, Rank.FOUR, 'f4'))];
+  const consolidatable = canTrotta(trottaCard, table);
+  assert(consolidatable.length === 1, 'Should have one pile to trotta');
+  const capFound = findCaptureCardForValue([trottaCard, capture4], getTableValue(trottaCard), trottaCard.id);
+  assert(capFound, 'Capture card for trotta value should be found');
 });
 
 // 4. Trotta consolidates singles + two-card pile + pair summing value

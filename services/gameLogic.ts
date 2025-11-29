@@ -352,6 +352,11 @@ export const performCapture = (
     };
 };
 
+// Helper: find a capture card in hand (excluding a specific card id) whose hand value equals target build value
+export const findCaptureCardForValue = (hand: Card[], targetValue: number, excludeCardId?: string): Card | null => {
+    return hand.find(c => c.id !== excludeCardId && getHandValue(c) === targetValue) || null;
+};
+
 // Trotta: Consolidate all matching cards into locked build
 export const canTrotta = (handCard: Card, table: TablePile[]): TablePile[] => {
     const trottaValue = getTableValue(handCard);
@@ -534,15 +539,19 @@ export const findBestMove = (aiHand: Card[], table: TablePile[]): Move => {
         }
     }
     
-    // 1. Check for Trotta (high priority - consolidates multiple cards)
+    // 1. Check for Trotta (only if immediate capture card exists)
     for (const card of aiHand) {
         const consolidatable = canTrotta(card, table);
-        if (consolidatable.length >= 1) { // Consolidate even a single matching pile
-            return {
-                type: 'trotta',
-                cardId: card.id,
-                pileIds: consolidatable.map(p => p.id)
-            };
+        if (consolidatable.length >= 1) {
+            const trottaValue = getTableValue(card);
+            const captureCard = findCaptureCardForValue(aiHand, trottaValue, card.id);
+            if (captureCard) {
+                return {
+                    type: 'trotta',
+                    cardId: card.id,
+                    pileIds: consolidatable.map(p => p.id)
+                };
+            }
         }
     }
     
@@ -564,7 +573,7 @@ export const findBestMove = (aiHand: Card[], table: TablePile[]): Move => {
 
     if (bestCapture) return bestCapture;
 
-    // 3. Check for Build (with proper validation)
+    // 3. Check for Build (only if immediate capture card exists)
     const aiBuilds = table.filter(p => p.isBuild && p.owner === 'opponent');
     
     for (const playCard of aiHand) {
@@ -573,12 +582,15 @@ export const findBestMove = (aiHand: Card[], table: TablePile[]): Move => {
         for (const pile of singles) {
             const buildValue = canBuild(playCard, [pile], aiHand, table, aiBuilds);
             if (buildValue !== null) {
-                return {
-                    type: 'build',
-                    cardId: playCard.id,
-                    pileIds: [pile.id],
-                    buildValue
-                };
+                const captureCard = findCaptureCardForValue(aiHand, buildValue, playCard.id);
+                if (captureCard) {
+                    return {
+                        type: 'build',
+                        cardId: playCard.id,
+                        pileIds: [pile.id],
+                        buildValue
+                    };
+                }
             }
         }
     }
