@@ -81,6 +81,39 @@ export const calculateMulleScore = (cards: Card[]): number => {
   return totalPoints;
 };
 
+// Special rule: When 2 identical cards are captured FROM TABLE ONLY (not involving hand card)
+// and both have low table values (Ace=1, Spader 2=2, Ruter 10=10), 
+// award "tabbar" instead of mulle points to avoid double-counting.
+// Returns { mulleTabbar: number } where mulleTabbar = table value of the card pair.
+export const calculateTableMulleTabbar = (tableCards: Card[]): number => {
+  const counts = new Map<string, number>();
+  
+  tableCards.forEach(c => {
+    const key = `${c.suit}-${c.rank}`;
+    counts.set(key, (counts.get(key) || 0) + 1);
+  });
+
+  let tabbar = 0;
+  counts.forEach((count, key) => {
+    if (count >= 2) {
+      const [suitStr, rankStr] = key.split('-');
+      const suit = suitStr as Suit;
+      const rank = parseInt(rankStr) as Rank;
+      
+      // Only for Ace (table=1), Spader 2 (table=2), or Ruter 10 (table=10)
+      if (rank === Rank.ACE) {
+        tabbar += Math.floor(count / 2) * 1; // 1 tabbe per pair
+      } else if (suit === Suit.SPADES && rank === Rank.TWO) {
+        tabbar += Math.floor(count / 2) * 2; // 2 tabbar per pair
+      } else if (suit === Suit.DIAMONDS && rank === Rank.TEN) {
+        tabbar += Math.floor(count / 2) * 10; // 10 tabbar per pair
+      }
+    }
+  });
+  
+  return tabbar;
+};
+
 export const calculateIntakePoints = (cards: Card[]): number => {
   let points = 0;
   for (const c of cards) {
@@ -164,38 +197,52 @@ export const canCapture = (handCard: Card, selectedPiles: TablePile[]): boolean 
   }
 
   // Normal cards (1-13): Can capture any collection that partitions into the hand value
-  return canPartition(selectedPiles, handVal);
+    // Constraint: Cannot combine more than ONE build in a single capture
+    const buildCount = selectedPiles.filter(p => p.isBuild).length;
+    if (buildCount > 1) return false;
+    return canPartition(selectedPiles, handVal);
 };
 
 // Find absorbable piles for a build (single-piles and 2-card structures)
 const findAbsorbablePiles = (table: TablePile[], targetValue: number, excludePileIds: string[]): TablePile[] => {
-    // Filter: single-piles or 2-card structures, not excluded, not locked
-    const candidates = table.filter(p => 
+    // Rule: When building, absorb all singles and 2-card structures whose value = targetValue
+    return table.filter(p => 
         !excludePileIds.includes(p.id) &&
         !p.isLocked &&
-        (p.cards.length === 1 || p.cards.length === 2)
+        (p.cards.length === 1 || p.cards.length === 2) &&
+        getPileValue(p) === targetValue
     );
+};
 
-    // Direct matches first
-    const directMatches = candidates.filter(p => getPileValue(p) === targetValue);
-    if (directMatches.length > 0) return directMatches;
+// Find all single combinations summing to target (for capture expansion)
+const findSingleCombos = (table: TablePile[], targetValue: number, excludePileIds: string[]): TablePile[] => {
+    const singles = table.filter(p => 
+        !excludePileIds.includes(p.id) && 
+        !p.isBuild && 
+        p.cards.length === 1
+    );
+    const allCombos = findSubsetsSum(singles, targetValue);
+    // Flatten all matching subsets into a unique pile list
+    const uniquePiles = new Map<string, TablePile>();
+    allCombos.forEach(combo => combo.forEach(p => uniquePiles.set(p.id, p)));
+    return Array.from(uniquePiles.values());
+};
 
-    // Find subset that sums to targetValue using greedy approach
-    // Sort by value descending to prioritize larger piles
-    const sorted = [...candidates].sort((a, b) => getPileValue(b) - getPileValue(a));
-    const absorbed: TablePile[] = [];
-    let currentSum = 0;
-
-    for (const pile of sorted) {
-        const pileVal = getPileValue(pile);
-        if (currentSum + pileVal <= targetValue) {
-            absorbed.push(pile);
-            currentSum += pileVal;
-            if (currentSum === targetValue) break;
+// Check if discard creates an absorbable pair (discard + single on table = build value)
+export const findDiscardAbsorption = (discardCard: Card, table: TablePile[]): { build: TablePile, single: TablePile } | null => {
+    const discardVal = getTableValue(discardCard);
+    for (const build of table.filter(p => p.isBuild)) {
+        const needed = build.buildValue! - discardVal;
+        const matchingSingle = table.find(p => 
+            !p.isBuild && 
+            p.cards.length === 1 && 
+            getTableValue(p.cards[0]) === needed
+        );
+        if (matchingSingle) {
+            return { build, single: matchingSingle };
         }
     }
-
-    return currentSum === targetValue ? absorbed : [];
+    return null;
 };
 
 export const canBuild = (handCard: Card, selectedPiles: TablePile[], hand: Card[], table: TablePile[], playerBuilds: TablePile[]): number | null => {
@@ -282,6 +329,26 @@ export const performBuild = (
             ...(shouldMerge ? existingSameValueBuilds.map(b => b.id) : [])
         ],
         isLocked
+    };
+};
+
+// Perform capture with single-combo expansion (Rule 2: all single combos get pulled in)
+export const performCapture = (
+    handCard: Card,
+    selectedPiles: TablePile[],
+    table: TablePile[]
+): { allCapturedPiles: TablePile[] } => {
+    const handVal = getHandValue(handCard);
+    const selectedPileIds = selectedPiles.map(p => p.id);
+    
+    // If capturing normally (not special 14/15/16), also grab all single combos summing to handVal
+    let extraSingles: TablePile[] = [];
+    if (handVal < 14) {
+        extraSingles = findSingleCombos(table, handVal, selectedPileIds);
+    }
+    
+    return {
+        allCapturedPiles: [...selectedPiles, ...extraSingles]
     };
 };
 
@@ -400,7 +467,9 @@ const getBestCaptureForCard = (card: Card, table: TablePile[]): { pileIds: strin
         if (targets.length > 0) validSubsets.push(targets);
     } else {
         // Find all subsets summing to handVal
-        validSubsets = findSubsetsSum(table, handVal);
+        validSubsets = findSubsetsSum(table, handVal)
+            // Do not allow subsets that include more than one build
+            .filter(sub => sub.filter(p => p.isBuild).length <= 1);
     }
 
     if (validSubsets.length === 0) return null;
@@ -416,12 +485,15 @@ const getBestCaptureForCard = (card: Card, table: TablePile[]): { pileIds: strin
     const chosenPiles: TablePile[] = [];
     const usedIds = new Set<string>();
 
+    let usedBuilds = 0;
     for (const subset of validSubsets) {
-        if (subset.every(p => !usedIds.has(p.id))) {
+        const subsetBuilds = subset.filter(p => p.isBuild).length;
+        if (subset.every(p => !usedIds.has(p.id)) && (usedBuilds + subsetBuilds) <= 1) {
             subset.forEach(p => {
                 chosenPiles.push(p);
                 usedIds.add(p.id);
             });
+            usedBuilds += subsetBuilds;
         }
     }
 
@@ -465,7 +537,7 @@ export const findBestMove = (aiHand: Card[], table: TablePile[]): Move => {
     // 1. Check for Trotta (high priority - consolidates multiple cards)
     for (const card of aiHand) {
         const consolidatable = canTrotta(card, table);
-        if (consolidatable.length >= 2) { // Only worthwhile if consolidating 2+ piles
+        if (consolidatable.length >= 1) { // Consolidate even a single matching pile
             return {
                 type: 'trotta',
                 cardId: card.id,
@@ -511,7 +583,24 @@ export const findBestMove = (aiHand: Card[], table: TablePile[]): Move => {
         }
     }
 
-    // 4. Discard (Lowest hand value)
+    // 4. Discard: Prefer FEED if AI has builds
+    const hasOwnBuild = table.some(p => p.isBuild && p.owner === 'opponent');
+    if (hasOwnBuild) {
+        for (const card of aiHand) {
+            const feedTarget = findFeedTarget(card, table, 'opponent');
+            if (feedTarget) {
+                return { type: 'discard', cardId: card.id, pileIds: [] }; // Reducer will feed
+            }
+        }
+        // If no feed possible, try to avoid discarding by re-attempting trotta on any single
+        for (const card of aiHand) {
+            const consolidatable = canTrotta(card, table);
+            if (consolidatable.length >= 1) {
+                return { type: 'trotta', cardId: card.id, pileIds: consolidatable.map(p => p.id) };
+            }
+        }
+        // As last resort, still discard lowest value to avoid deadlock
+    }
     const sortedHand = [...aiHand].sort((a, b) => getHandValue(a) - getHandValue(b));
     return { type: 'discard', cardId: sortedHand[0].id, pileIds: [] };
 };

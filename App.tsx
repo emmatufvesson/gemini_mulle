@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useReducer } from 'react';
 import { GameState, Card, TablePile, PlayerState, GameLog, Suit, Rank } from './types';
-import { createDeck, getHandValue, getPileValue, getMullePoints, updatePlayerScore, canCapture, findBestMove, getTableValue, canBuild, calculateMulleScore, performBuild, canTrotta, performTrotta, findFeedTarget, performFeed, findIdenticalCard } from './services/gameLogic';
+import { createDeck, getHandValue, getPileValue, getMullePoints, updatePlayerScore, canCapture, findBestMove, getTableValue, canBuild, calculateMulleScore, performBuild, canTrotta, performTrotta, findFeedTarget, performFeed, findIdenticalCard, calculateTableMulleTabbar, performCapture, findDiscardAbsorption } from './services/gameLogic';
 import { INITIAL_TABLE_SIZE, HAND_SIZE, TOTAL_ROUNDS } from './constants';
 import CardComponent from './components/CardComponent';
 
@@ -104,21 +104,35 @@ const gameReducer = (state: GameState, action: Action): GameState => {
 
       if (moveType === 'capture') {
         const capturedPiles = state.table.filter(p => targetPileIds.includes(p.id));
+        
+        // Use performCapture to auto-expand with single combos
+        const { allCapturedPiles } = performCapture(playedCard, capturedPiles, state.table);
+        
         let allInvolvedCards: Card[] = [playedCard];
         let tabbePoints = 0;
 
-        capturedPiles.forEach(p => {
+        allCapturedPiles.forEach(p => {
           allInvolvedCards = [...allInvolvedCards, ...p.cards];
         });
 
-        // Calculate Points using centralized logic
+        // Extract table cards only (everything except played card from hand)
+        const tableOnlyCards = allInvolvedCards.slice(1);
+        
+        // Check for table-mulle tabbar (2 aces, 2 Sp2s, 2 Ru10s from table)
+        const tableMulleTabbar = calculateTableMulleTabbar(tableOnlyCards);
+        if (tableMulleTabbar > 0) {
+          tabbePoints += tableMulleTabbar;
+          newLogs.push({ id: Date.now().toString() + 'tmt', message: `Table Mulle! +${tableMulleTabbar} tabbar`, type: 'alert' });
+        }
+
+        // Calculate normal Mulle points (including hand card)
         const mullePts = calculateMulleScore(allInvolvedCards);
         if (mullePts > 0) {
             newLogs.push({ id: Date.now().toString() + 'pm', message: `MULLE! +${mullePts} points`, type: 'alert' });
         }
 
         newPlayer.captured = [...newPlayer.captured, ...allInvolvedCards];
-        newTable = newTable.filter(p => !targetPileIds.includes(p.id));
+        newTable = newTable.filter(p => !allCapturedPiles.some(cp => cp.id === p.id));
 
         if (newTable.length === 0) {
           tabbePoints += 1;
@@ -130,23 +144,39 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         newPlayer = updatePlayerScore(newPlayer);
         lastCapturer = 'player';
         
-        newLogs.push({ id: Date.now() + 'c', message: `You captured ${allInvolvedCards.length - 1} cards.`, type: 'action' });
-
-      } else if (moveType === 'discard') {
-        // Check for feed first
-        const feedTarget = findFeedTarget(playedCard, state.table, 'player');
-        if (feedTarget) {
-          const updatedBuild = performFeed(playedCard, feedTarget);
-          newTable = newTable.map(p => p.id === feedTarget.id ? updatedBuild : p);
-          newLogs.push({ id: Date.now() + 'f', message: `Fed ${playedCard.suit} ${playedCard.rank} to build (locked).`, type: 'action' });
-        } else {
-          newTable.push({
-            id: `pile-${playedCard.id}`,
-            cards: [playedCard],
-            isBuild: false
-          });
-          newLogs.push({ id: Date.now() + 'd', message: `You discarded ${playedCard.suit} ${playedCard.rank}.`, type: 'info' });
-        }
+        const extraCount = allCapturedPiles.length - capturedPiles.length;
+        const extraMsg = extraCount > 0 ? ` +${extraCount} combos` : '';
+        newLogs.push({ id: Date.now() + 'c', message: `You captured ${allInvolvedCards.length - 1} cards${extraMsg}.`, type: 'action' });      } else if (moveType === 'discard') {
+                // Check absorption first, then feed
+                const absorption = findDiscardAbsorption(playedCard, state.table);
+        
+                if (absorption) {
+                    // Merge discard + single into the build and lock it
+                    const { build, single } = absorption;
+                    const updatedBuild: TablePile = {
+                        ...build,
+                        cards: [...build.cards, playedCard, single.cards[0]],
+                        isLocked: true
+                    };
+          
+                    newTable = newTable.filter(p => p.id !== build.id && p.id !== single.id);
+                    newTable.push(updatedBuild);
+                    newLogs.push({ id: Date.now() + 'a', message: `Your discard absorbed into build ${build.buildValue}.`, type: 'action' });
+                } else {
+                    const feedTarget = findFeedTarget(playedCard, state.table, 'player');
+                    if (feedTarget) {
+                        const updatedBuild = performFeed(playedCard, feedTarget);
+                        newTable = newTable.map(p => p.id === feedTarget.id ? updatedBuild : p);
+                        newLogs.push({ id: Date.now() + 'f', message: `Fed ${playedCard.suit} ${playedCard.rank} to build (locked).`, type: 'action' });
+                    } else {
+                        newTable.push({
+                            id: `pile-${playedCard.id}`,
+                            cards: [playedCard],
+                            isBuild: false
+                        });
+                        newLogs.push({ id: Date.now() + 'd', message: `You discarded ${playedCard.suit} ${playedCard.rank}.`, type: 'info' });
+                    }
+                }
       } else if (moveType === 'build') {
         // Build with absorption
         const selectedPiles = state.table.filter(p => targetPileIds.includes(p.id));
@@ -208,12 +238,26 @@ const gameReducer = (state: GameState, action: Action): GameState => {
 
       if (move.type === 'capture') {
          const capturedPiles = state.table.filter(p => move.pileIds.includes(p.id));
+         
+         // Use performCapture to auto-expand with single combos
+         const { allCapturedPiles } = performCapture(playedCard, capturedPiles, state.table);
+         
          let allInvolvedCards: Card[] = [playedCard];
          let tabbePoints = 0;
 
-         capturedPiles.forEach(p => {
+         allCapturedPiles.forEach(p => {
             allInvolvedCards = [...allInvolvedCards, ...p.cards];
          });
+
+         // Extract table cards only (everything except played card from hand)
+         const tableOnlyCards = allInvolvedCards.slice(1);
+         
+         // Check for table-mulle tabbar
+         const tableMulleTabbar = calculateTableMulleTabbar(tableOnlyCards);
+         if (tableMulleTabbar > 0) {
+             tabbePoints += tableMulleTabbar;
+             newLogs.push({ id: Date.now() + 'otmt', message: `Opponent Table Mulle! +${tableMulleTabbar} tabbar`, type: 'alert' });
+         }
 
          const mullePts = calculateMulleScore(allInvolvedCards);
          if (mullePts > 0) {
@@ -221,7 +265,7 @@ const gameReducer = (state: GameState, action: Action): GameState => {
          }
 
          newOpponent.captured = [...newOpponent.captured, ...allInvolvedCards];
-         newTable = newTable.filter(p => !move.pileIds.includes(p.id));
+         newTable = newTable.filter(p => !allCapturedPiles.some(cp => cp.id === p.id));
 
          if (newTable.length === 0) {
              tabbePoints += 1;
@@ -232,7 +276,10 @@ const gameReducer = (state: GameState, action: Action): GameState => {
          newOpponent.score.tabbePoints += tabbePoints;
          newOpponent = updatePlayerScore(newOpponent);
          lastCapturer = 'opponent';
-         newLogs.push({ id: Date.now() + 'oc', message: `Opponent captured with ${playedCard.suit} ${playedCard.rank}`, type: 'info' });
+         
+         const extraCount = allCapturedPiles.length - capturedPiles.length;
+         const extraMsg = extraCount > 0 ? ` +${extraCount} combos` : '';
+         newLogs.push({ id: Date.now() + 'oc', message: `Opponent captured ${allInvolvedCards.length - 1} cards${extraMsg}.`, type: 'info' });
 
       } else if (move.type === 'build') {
                  // Build with absorption
@@ -263,19 +310,35 @@ const gameReducer = (state: GameState, action: Action): GameState => {
        newLogs.push({ id: Date.now() + 'otr', message: `Opponent tröttade ${trottaBuild.buildValue}.`, type: 'action' });
 
       } else {
-                    // Discard (check feed)
-                    const feedTarget = findFeedTarget(playedCard, state.table, 'opponent');
-                    if (feedTarget) {
-                        const updatedBuild = performFeed(playedCard, feedTarget);
-                        newTable = newTable.map(p => p.id === feedTarget.id ? updatedBuild : p);
-                        newLogs.push({ id: Date.now() + 'of', message: `Opponent fed to build.`, type: 'info' });
+                    // Discard - check absorption first, then feed
+                    const absorption = findDiscardAbsorption(playedCard, state.table);
+                    
+                    if (absorption) {
+                        // Merge discard + single into the build and lock it
+                        const { build, single } = absorption;
+                        const updatedBuild: TablePile = {
+                            ...build,
+                            cards: [...build.cards, playedCard, single.cards[0]],
+                            isLocked: true
+                        };
+                        
+                        newTable = newTable.filter(p => p.id !== build.id && p.id !== single.id);
+                        newTable.push(updatedBuild);
+                        newLogs.push({ id: Date.now() + 'oa', message: `Opponent's discard absorbed into build ${build.buildValue}.`, type: 'action' });
                     } else {
-                        newTable.push({
-                                id: `pile-${playedCard.id}`,
-                                cards: [playedCard],
-                                isBuild: false
-                        });
-                        newLogs.push({ id: Date.now() + 'od', message: `Opponent discarded ${playedCard.rank}.`, type: 'info' });
+                        const feedTarget = findFeedTarget(playedCard, state.table, 'opponent');
+                        if (feedTarget) {
+                            const updatedBuild = performFeed(playedCard, feedTarget);
+                            newTable = newTable.map(p => p.id === feedTarget.id ? updatedBuild : p);
+                            newLogs.push({ id: Date.now() + 'of', message: `Opponent fed to build.`, type: 'info' });
+                        } else {
+                            newTable.push({
+                                    id: `pile-${playedCard.id}`,
+                                    cards: [playedCard],
+                                    isBuild: false
+                            });
+                            newLogs.push({ id: Date.now() + 'od', message: `Opponent discarded ${playedCard.suit} ${playedCard.rank}`, type: 'info' });
+                        }
                     }
       }
 
@@ -398,7 +461,15 @@ const App: React.FC = () => {
           alert("Deselect table cards to discard.");
           return;
       }
-      dispatch({ type: 'PLAYER_MOVE', moveType: 'discard', playedCardId: state.selectedHandCardId, targetPileIds: [] });
+      const handCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
+      if (!handCard) return;
+      const feedTarget = findFeedTarget(handCard, state.table, 'player');
+      const playerHasBuild = state.table.some(p => p.isBuild && p.owner === 'player');
+      if (playerHasBuild && !feedTarget) {
+          alert("Du har ett bygge. Du får inte släppa kort till bordet. Bygg, bygg om, ta in eller trötta.");
+          return;
+      }
+      dispatch({ type: 'PLAYER_MOVE', moveType: 'discard', playedCardId: handCard.id, targetPileIds: [] });
   };
 
   const handleBuildUp = () => {

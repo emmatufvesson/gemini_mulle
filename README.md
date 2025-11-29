@@ -2,19 +2,26 @@
 <img width="1200" height="475" alt="GHBanner" src="https://github.com/user-attachments/assets/0aa67016-6eaf-458a-adb2-6e31a0763ed6" />
 </div>
 
-# Run and deploy your AI Studio app
+# Mulle — Regler och Körning
 
-This contains everything you need to run your app locally.
+Denna app implementerar kortspelet Mulle för två spelare.
 
-View your app in AI Studio: https://ai.studio/apps/drive/1euELJVw5_Ja_Q_C2eUO0fr6eYn4RPUFY
+## Centrala Regler (utdrag)
 
-## Run Locally
+- Specialvärden i hand: A=14, SP 2=15, RU 10=16. På bordet: A=1, övriga nominellt.
+- Capture: Matcha handvärde mot bordets värden. Special (14/15/16) får endast ta byggen eller identiskt kort.
+- Identiskt kort: Finns exakt ett identiskt kort på bordet måste du ta det (mulle).
+- Build: Kräver reservationskort; vid skapande/ombyggnad kan högar med exakt byggvärde absorberas. Absorption låser.
+- Trotta: Konsoliderar alla kort/strukturer som bildar värdet till ett låst bygge.
+- Feed: Släppt kort med samma bordvärde som eget bygge läggs automatiskt till bygget och låser det.
+- Bordmulle-tabbar: Två identiska bordkort som tas in samtidigt ger tabbar istället för mullepoäng: 2×Ess=1 tabbe, 2×SP 2=2 tabbar, 2×RU 10=10 tabbar.
+- Discard-begränsning: Om du har byggen på bordet får du inte släppa kort till bordet. Tillåtna drag då är: Capture, Build (skapa/bygga om), Trotta. Discard är endast tillåten om kortet kan feedas in i ett eget bygge.
 
-**Prerequisites:**  Node.js
+## Kör Lokalt
 
+**Krav:** Node.js
 
-1. Install dependencies:
+1. Installera beroenden:
    `npm install`
-2. Set the `GEMINI_API_KEY` in [.env.local](.env.local) to your Gemini API key
-3. Run the app:
+2. Kör appen:
    `npm run dev`
