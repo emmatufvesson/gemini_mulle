@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useReducer } from 'react';
 import { GameState, Card, TablePile, PlayerState, GameLog, Suit, Rank } from './types';
-import { createDeck, getHandValue, getPileValue, getMullePoints, updatePlayerScore, canCapture, findBestMove, getTableValue, canBuild, calculateMulleScore } from './services/gameLogic';
+import { createDeck, getHandValue, getPileValue, getMullePoints, updatePlayerScore, canCapture, findBestMove, getTableValue, canBuild, calculateMulleScore, performBuild, canTrotta, performTrotta, findFeedTarget, performFeed, findIdenticalCard } from './services/gameLogic';
 import { INITIAL_TABLE_SIZE, HAND_SIZE, TOTAL_ROUNDS } from './constants';
 import CardComponent from './components/CardComponent';
 
@@ -133,78 +133,51 @@ const gameReducer = (state: GameState, action: Action): GameState => {
         newLogs.push({ id: Date.now() + 'c', message: `You captured ${allInvolvedCards.length - 1} cards.`, type: 'action' });
 
       } else if (moveType === 'discard') {
-        newTable.push({
-          id: `pile-${playedCard.id}`,
-          cards: [playedCard],
-          isBuild: false
-        });
-        newLogs.push({ id: Date.now() + 'd', message: `You discarded ${playedCard.suit} ${playedCard.rank}.`, type: 'info' });
-      } else if (moveType === 'build') {
-        // Build: Combine played card with selected piles
-        const builtPiles = state.table.filter(p => targetPileIds.includes(p.id));
-        let buildCards: Card[] = [playedCard];
-        const playedCardTableValue = getTableValue(playedCard);
-        let buildValue: number;
-        
-        builtPiles.forEach(p => {
-          buildCards = [...buildCards, ...p.cards];
-        });
-        
-        // If building on existing build, calculate up/down based on direction
-        if (builtPiles.length === 1 && builtPiles[0].isBuild && builtPiles[0].buildValue) {
-          const existingValue = builtPiles[0].buildValue;
-          if (action.buildDirection === 'up') {
-            buildValue = existingValue + playedCardTableValue;
-          } else if (action.buildDirection === 'down') {
-            buildValue = Math.abs(existingValue - playedCardTableValue);
-          } else {
-            // Default: use hand value if no direction specified (new build)
-            buildValue = getHandValue(playedCard);
-          }
+        // Check for feed first
+        const feedTarget = findFeedTarget(playedCard, state.table, 'player');
+        if (feedTarget) {
+          const updatedBuild = performFeed(playedCard, feedTarget);
+          newTable = newTable.map(p => p.id === feedTarget.id ? updatedBuild : p);
+          newLogs.push({ id: Date.now() + 'f', message: `Fed ${playedCard.suit} ${playedCard.rank} to build (locked).`, type: 'action' });
         } else {
-          // New build or building on single pile: use hand value or sum
-          const pilesSum = builtPiles.reduce((sum, p) => sum + getPileValue(p), 0);
-          buildValue = pilesSum + playedCardTableValue;
+          newTable.push({
+            id: `pile-${playedCard.id}`,
+            cards: [playedCard],
+            isBuild: false
+          });
+          newLogs.push({ id: Date.now() + 'd', message: `You discarded ${playedCard.suit} ${playedCard.rank}.`, type: 'info' });
         }
+      } else if (moveType === 'build') {
+        // Build with absorption
+        const selectedPiles = state.table.filter(p => targetPileIds.includes(p.id));
+        const pilesSum = selectedPiles.reduce((sum, p) => sum + getPileValue(p), 0);
+        const buildValue = pilesSum + getTableValue(playedCard);
         
-        // Remove old piles
-        newTable = newTable.filter(p => !targetPileIds.includes(p.id));
+        const { newPile, absorbedPileIds, isLocked } = performBuild(
+          playedCard,
+          selectedPiles,
+          state.table,
+          buildValue,
+          'player'
+        );
         
-        // Add new build pile
-        newTable.push({
-          id: `build-${Date.now()}`,
-          cards: buildCards,
-          isBuild: true,
-          buildValue: buildValue,
-          owner: 'player',
-          isLocked: false
-        });
+        // Remove selected and absorbed piles
+        newTable = newTable.filter(p => !targetPileIds.includes(p.id) && !absorbedPileIds.includes(p.id));
+        newTable.push(newPile);
         
-        newLogs.push({ id: Date.now() + 'pb', message: `You built ${buildValue}.`, type: 'info' });
+        const absorbedCount = absorbedPileIds.length;
+        const lockMsg = isLocked ? ' (locked)' : '';
+        const absorbMsg = absorbedCount > 0 ? ` +${absorbedCount} absorbed` : '';
+        newLogs.push({ id: Date.now() + 'pb', message: `You built ${buildValue}${absorbMsg}${lockMsg}.`, type: 'info' });
       } else if (moveType === 'trotta') {
-        // Trötta: Consolidate all matching cards into locked build
-        const trottaPiles = state.table.filter(p => targetPileIds.includes(p.id));
-        let trottaCards: Card[] = [playedCard];
-        const trottaValue = getTableValue(playedCard);
+        // Trotta with automatic consolidation
+        const consolidatable = canTrotta(playedCard, state.table);
+        const trottaBuild = performTrotta(playedCard, consolidatable, 'player');
         
-        trottaPiles.forEach(p => {
-          trottaCards = [...trottaCards, ...p.cards];
-        });
+        newTable = newTable.filter(p => !consolidatable.some(c => c.id === p.id));
+        newTable.push(trottaBuild);
         
-        // Remove consolidated piles
-        newTable = newTable.filter(p => !targetPileIds.includes(p.id));
-        
-        // Create locked build
-        newTable.push({
-          id: `trotta-${Date.now()}`,
-          cards: trottaCards,
-          isBuild: true,
-          buildValue: trottaValue,
-          owner: 'player',
-          isLocked: true // Trötta always locks
-        });
-        
-        newLogs.push({ id: Date.now() + 'ptr', message: `You tröttade ${trottaValue} (${trottaCards.length} cards).`, type: 'action' });
+        newLogs.push({ id: Date.now() + 'ptr', message: `You tröttade ${trottaBuild.buildValue} (${trottaBuild.cards.length} cards, locked).`, type: 'action' });
       }
 
       return {
@@ -262,36 +235,48 @@ const gameReducer = (state: GameState, action: Action): GameState => {
          newLogs.push({ id: Date.now() + 'oc', message: `Opponent captured with ${playedCard.suit} ${playedCard.rank}`, type: 'info' });
 
       } else if (move.type === 'build') {
-         // Perform Build
-         const builtPiles = state.table.filter(p => move.pileIds.includes(p.id));
-         let buildCards: Card[] = [playedCard];
-         builtPiles.forEach(p => {
-             buildCards = [...buildCards, ...p.cards];
-         });
+                 // Build with absorption
+                 const selectedPiles = state.table.filter(p => move.pileIds.includes(p.id));
          
-         // Remove old piles
-         newTable = newTable.filter(p => !move.pileIds.includes(p.id));
+                 const { newPile, absorbedPileIds, isLocked } = performBuild(
+                     playedCard,
+                     selectedPiles,
+                     state.table,
+                     move.buildValue!,
+                     'opponent'
+                 );
          
-         // Add new build pile
-         newTable.push({
-             id: `build-${Date.now()}`,
-             cards: buildCards,
-             isBuild: true,
-             buildValue: move.buildValue,
-             owner: 'opponent',
-             isLocked: false // Initially open
-         });
+                 newTable = newTable.filter(p => !move.pileIds.includes(p.id) && !absorbedPileIds.includes(p.id));
+                 newTable.push(newPile);
          
-         newLogs.push({ id: Date.now() + 'ob', message: `Opponent built ${move.buildValue}.`, type: 'info' });
+                 const lockMsg = isLocked ? ' (locked)' : '';
+                 newLogs.push({ id: Date.now() + 'ob', message: `Opponent built ${move.buildValue}${lockMsg}.`, type: 'info' });
+
+    } else if (move.type === 'trotta') {
+       // Trotta
+       const consolidatable = state.table.filter(p => move.pileIds.includes(p.id));
+       const trottaBuild = performTrotta(playedCard, consolidatable, 'opponent');
+         
+       newTable = newTable.filter(p => !move.pileIds.includes(p.id));
+       newTable.push(trottaBuild);
+         
+       newLogs.push({ id: Date.now() + 'otr', message: `Opponent tröttade ${trottaBuild.buildValue}.`, type: 'action' });
 
       } else {
-          // Discard
-          newTable.push({
-              id: `pile-${playedCard.id}`,
-              cards: [playedCard],
-              isBuild: false
-          });
-          newLogs.push({ id: Date.now() + 'od', message: `Opponent discarded ${playedCard.rank}.`, type: 'info' });
+                    // Discard (check feed)
+                    const feedTarget = findFeedTarget(playedCard, state.table, 'opponent');
+                    if (feedTarget) {
+                        const updatedBuild = performFeed(playedCard, feedTarget);
+                        newTable = newTable.map(p => p.id === feedTarget.id ? updatedBuild : p);
+                        newLogs.push({ id: Date.now() + 'of', message: `Opponent fed to build.`, type: 'info' });
+                    } else {
+                        newTable.push({
+                                id: `pile-${playedCard.id}`,
+                                cards: [playedCard],
+                                isBuild: false
+                        });
+                        newLogs.push({ id: Date.now() + 'od', message: `Opponent discarded ${playedCard.rank}.`, type: 'info' });
+                    }
       }
 
       return {
@@ -387,6 +372,18 @@ const App: React.FC = () => {
       const handCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
       if (!handCard) return;
 
+      // Check for identical card priority (Rule 3.2)
+      const identicalPile = findIdenticalCard(handCard, state.table);
+      if (identicalPile) {
+          // Must capture identical card only
+          if (state.selectedTablePileIds.length === 1 && state.selectedTablePileIds[0] === identicalPile.id) {
+              dispatch({ type: 'PLAYER_MOVE', moveType: 'capture', playedCardId: handCard.id, targetPileIds: [identicalPile.id] });
+          } else {
+              alert("You must capture the identical card (mulle)!");
+          }
+          return;
+      }
+
       const selectedPiles = state.table.filter(p => state.selectedTablePileIds.includes(p.id));
       if (canCapture(handCard, selectedPiles)) {
           dispatch({ type: 'PLAYER_MOVE', moveType: 'capture', playedCardId: handCard.id, targetPileIds: state.selectedTablePileIds });
@@ -411,22 +408,14 @@ const App: React.FC = () => {
 
       const selectedPiles = state.table.filter(p => state.selectedTablePileIds.includes(p.id));
       
-      // Calculate what the build value would be
-      let targetValue: number;
-      if (selectedPiles.length === 1 && selectedPiles[0].isBuild && selectedPiles[0].buildValue) {
-          targetValue = selectedPiles[0].buildValue + getTableValue(handCard);
-      } else {
-          const pilesSum = selectedPiles.reduce((sum, p) => sum + getPileValue(p), 0);
-          targetValue = pilesSum + getTableValue(handCard);
-      }
+      const pilesSum = selectedPiles.reduce((sum, p) => sum + getPileValue(p), 0);
+      const targetValue = pilesSum + getTableValue(handCard);
       
-      // Check reservation
-      const hasReservation = state.player.hand.some(c => 
-          c.id !== handCard.id && getHandValue(c) === targetValue
-      );
+      const playerBuilds = state.table.filter(p => p.isBuild && p.owner === 'player');
+      const buildValue = canBuild(handCard, selectedPiles, state.player.hand, state.table, playerBuilds);
       
-      if (!hasReservation) {
-          alert(`Invalid Build Up! You need a reservation card with value ${targetValue} in hand.`);
+      if (buildValue === null) {
+          alert(`Invalid Build! Need reservation card with value ${targetValue} (not already reserved).`);
           return;
       }
       
@@ -454,13 +443,11 @@ const App: React.FC = () => {
       const existingValue = selectedPiles[0].buildValue;
       const targetValue = Math.abs(existingValue - getTableValue(handCard));
       
-      // Check reservation
-      const hasReservation = state.player.hand.some(c => 
-          c.id !== handCard.id && getHandValue(c) === targetValue
-      );
+      const playerBuilds = state.table.filter(p => p.isBuild && p.owner === 'player');
+      const buildValue = canBuild(handCard, selectedPiles, state.player.hand, state.table, playerBuilds);
       
-      if (!hasReservation) {
-          alert(`Invalid Build Down! You need a reservation card with value ${targetValue} in hand.`);
+      if (buildValue === null) {
+          alert(`Invalid Build Down! Need reservation card with value ${targetValue} (not already reserved).`);
           return;
       }
       
@@ -478,20 +465,11 @@ const App: React.FC = () => {
       const handCard = state.player.hand.find(c => c.id === state.selectedHandCardId);
       if (!handCard) return;
 
-      // Trötta: Consolidate ALL cards/piles with same table value
-      const trottaValue = getTableValue(handCard);
+      // Use automatic trotta detection
+      const consolidatable = canTrotta(handCard, state.table);
       
-      // Find all matching piles/cards on table
-      const matchingPiles = state.table.filter(p => {
-          const pileValue = getPileValue(p);
-          // Match singles, 2-card structures, or builds with this value
-          if (p.cards.length <= 2 && pileValue === trottaValue) return true;
-          if (p.isBuild && p.buildValue === trottaValue) return true;
-          return false;
-      });
-
-      if (matchingPiles.length === 0) {
-          alert("No cards on table match this card's value for Trötta.");
+      if (consolidatable.length === 0) {
+          alert("No cards on table can be tröttad with this card.");
           return;
       }
 
@@ -500,7 +478,7 @@ const App: React.FC = () => {
           type: 'PLAYER_MOVE', 
           moveType: 'trotta', 
           playedCardId: handCard.id, 
-          targetPileIds: matchingPiles.map(p => p.id)
+          targetPileIds: consolidatable.map(p => p.id)
       });
   };
 

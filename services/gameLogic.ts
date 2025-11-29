@@ -167,19 +167,219 @@ export const canCapture = (handCard: Card, selectedPiles: TablePile[]): boolean 
   return canPartition(selectedPiles, handVal);
 };
 
-export const canBuild = (handCard: Card, selectedPiles: TablePile[], hand: Card[]): number | null => {
+// Find absorbable piles for a build (single-piles and 2-card structures)
+const findAbsorbablePiles = (table: TablePile[], targetValue: number, excludePileIds: string[]): TablePile[] => {
+    // Filter: single-piles or 2-card structures, not excluded, not locked
+    const candidates = table.filter(p => 
+        !excludePileIds.includes(p.id) &&
+        !p.isLocked &&
+        (p.cards.length === 1 || p.cards.length === 2)
+    );
+
+    // Direct matches first
+    const directMatches = candidates.filter(p => getPileValue(p) === targetValue);
+    if (directMatches.length > 0) return directMatches;
+
+    // Find subset that sums to targetValue using greedy approach
+    // Sort by value descending to prioritize larger piles
+    const sorted = [...candidates].sort((a, b) => getPileValue(b) - getPileValue(a));
+    const absorbed: TablePile[] = [];
+    let currentSum = 0;
+
+    for (const pile of sorted) {
+        const pileVal = getPileValue(pile);
+        if (currentSum + pileVal <= targetValue) {
+            absorbed.push(pile);
+            currentSum += pileVal;
+            if (currentSum === targetValue) break;
+        }
+    }
+
+    return currentSum === targetValue ? absorbed : [];
+};
+
+export const canBuild = (handCard: Card, selectedPiles: TablePile[], hand: Card[], table: TablePile[], playerBuilds: TablePile[]): number | null => {
     const pilesSum = selectedPiles.reduce((sum, p) => sum + getPileValue(p), 0);
     const tableVal = getTableValue(handCard);
     const targetValue = pilesSum + tableVal;
 
-    // Check reservation
-    const hasReservation = hand.some(c => getHandValue(c) === targetValue && c.id !== handCard.id);
+    // Cannot build on locked piles
     if (selectedPiles.some(p => p.isLocked)) return null;
 
-    if (hasReservation && targetValue <= 16) {
+    // Check reservation - must have another card with handValue = targetValue
+    const reservationCards = hand.filter(c => getHandValue(c) === targetValue && c.id !== handCard.id);
+    
+    // Check if reservation cards are already reserved for other builds
+    const availableReservations = reservationCards.filter(resCard => {
+        // Check if this card is the ONLY way to capture an existing player build
+        const canCaptureBuilds = playerBuilds.filter(b => b.buildValue === getHandValue(resCard));
+        if (canCaptureBuilds.length === 0) return true; // Not reserved
+        
+        // If this is the only card that can capture those builds, it's reserved
+        const otherCardsWithSameValue = hand.filter(c => 
+            c.id !== resCard.id && 
+            c.id !== handCard.id && 
+            getHandValue(c) === getHandValue(resCard)
+        );
+        
+        return otherCardsWithSameValue.length > 0; // Available if there are other cards
+    });
+
+    if (availableReservations.length === 0) return null;
+
+    if (targetValue <= 16) {
         return targetValue;
     }
     return null;
+};
+
+// Perform build with absorption
+export const performBuild = (
+    handCard: Card, 
+    selectedPiles: TablePile[], 
+    table: TablePile[], 
+    buildValue: number,
+    owner: 'player' | 'opponent'
+): { newPile: TablePile, absorbedPileIds: string[], isLocked: boolean } => {
+    const selectedPileIds = selectedPiles.map(p => p.id);
+    
+    // Find absorbable piles
+    const absorbable = findAbsorbablePiles(table, buildValue, selectedPileIds);
+    
+    // Combine all cards
+    let allCards: Card[] = [handCard];
+    selectedPiles.forEach(p => allCards.push(...p.cards));
+    absorbable.forEach(p => allCards.push(...p.cards));
+    
+    // Check if should lock
+    const wasAbsorbed = absorbable.length > 0;
+    const existingSameValueBuilds = table.filter(p => 
+        p.isBuild && 
+        p.buildValue === buildValue && 
+        !selectedPileIds.includes(p.id) &&
+        !absorbable.some(a => a.id === p.id)
+    );
+    const shouldMerge = existingSameValueBuilds.length > 0;
+    
+    if (shouldMerge) {
+        // Merge with existing build(s)
+        existingSameValueBuilds.forEach(b => allCards.push(...b.cards));
+    }
+    
+    const isLocked = wasAbsorbed || shouldMerge;
+    
+    return {
+        newPile: {
+            id: `build-${Date.now()}`,
+            cards: allCards,
+            isBuild: true,
+            buildValue,
+            owner,
+            isLocked
+        },
+        absorbedPileIds: [
+            ...absorbable.map(p => p.id),
+            ...(shouldMerge ? existingSameValueBuilds.map(b => b.id) : [])
+        ],
+        isLocked
+    };
+};
+
+// Trotta: Consolidate all matching cards into locked build
+export const canTrotta = (handCard: Card, table: TablePile[]): TablePile[] => {
+    const trottaValue = getTableValue(handCard);
+    const consolidatable: TablePile[] = [];
+    
+    // 1. Single piles with exact value
+    const singleMatches = table.filter(p => 
+        !p.isBuild && 
+        p.cards.length === 1 && 
+        getTableValue(p.cards[0]) === trottaValue
+    );
+    consolidatable.push(...singleMatches);
+    
+    // 2. 2-card structures that sum to trottaValue
+    const twoCardMatches = table.filter(p => 
+        p.cards.length === 2 && 
+        !p.isLocked &&
+        getPileValue(p) === trottaValue
+    );
+    consolidatable.push(...twoCardMatches);
+    
+    // 3. Pairs of singles that sum to trottaValue
+    const singles = table.filter(p => !p.isBuild && p.cards.length === 1);
+    const usedIds = new Set([...singleMatches.map(p => p.id), ...twoCardMatches.map(p => p.id)]);
+    
+    for (let i = 0; i < singles.length; i++) {
+        if (usedIds.has(singles[i].id)) continue;
+        for (let j = i + 1; j < singles.length; j++) {
+            if (usedIds.has(singles[j].id)) continue;
+            const sum = getTableValue(singles[i].cards[0]) + getTableValue(singles[j].cards[0]);
+            if (sum === trottaValue) {
+                consolidatable.push(singles[i], singles[j]);
+                usedIds.add(singles[i].id);
+                usedIds.add(singles[j].id);
+                break;
+            }
+        }
+    }
+    
+    return consolidatable;
+};
+
+export const performTrotta = (
+    handCard: Card,
+    consolidatablePiles: TablePile[],
+    owner: 'player' | 'opponent'
+): TablePile => {
+    const trottaValue = getTableValue(handCard);
+    let allCards: Card[] = [handCard];
+    
+    consolidatablePiles.forEach(p => allCards.push(...p.cards));
+    
+    return {
+        id: `trotta-${Date.now()}`,
+        cards: allCards,
+        isBuild: true,
+        buildValue: trottaValue,
+        owner,
+        isLocked: true // Trotta always locks
+    };
+};
+
+// Feed: Check if card should be fed to existing build
+export const findFeedTarget = (handCard: Card, table: TablePile[], owner: 'player' | 'opponent'): TablePile | null => {
+    const cardValue = getTableValue(handCard);
+    
+    // Find player's builds with matching value
+    const matchingBuild = table.find(p => 
+        p.isBuild && 
+        p.owner === owner && 
+        p.buildValue === cardValue
+    );
+    
+    return matchingBuild || null;
+};
+
+export const performFeed = (handCard: Card, targetBuild: TablePile): TablePile => {
+    return {
+        ...targetBuild,
+        cards: [...targetBuild.cards, handCard],
+        isLocked: true // Feed always locks
+    };
+};
+
+// Check for identical card on table (Rule 3.2)
+export const findIdenticalCard = (handCard: Card, table: TablePile[]): TablePile | null => {
+    const identicals = table.filter(p => 
+        !p.isBuild && 
+        p.cards.length === 1 &&
+        p.cards[0].suit === handCard.suit &&
+        p.cards[0].rank === handCard.rank
+    );
+    
+    // Rule: If exactly one identical exists, it's the only valid option
+    return identicals.length === 1 ? identicals[0] : null;
 };
 
 // --- AI Logic ---
@@ -249,7 +449,32 @@ const getBestCaptureForCard = (card: Card, table: TablePile[]): { pileIds: strin
 };
 
 export const findBestMove = (aiHand: Card[], table: TablePile[]): Move => {
-    // 1 & 2. Check for Capture (Prioritizing Mulles via score)
+    // 0. Check for identical card (Rule 3.2 - forced mulle)
+    for (const card of aiHand) {
+        const identicalPile = findIdenticalCard(card, table);
+        if (identicalPile) {
+            // Must capture identical card
+            return {
+                type: 'capture',
+                cardId: card.id,
+                pileIds: [identicalPile.id]
+            };
+        }
+    }
+    
+    // 1. Check for Trotta (high priority - consolidates multiple cards)
+    for (const card of aiHand) {
+        const consolidatable = canTrotta(card, table);
+        if (consolidatable.length >= 2) { // Only worthwhile if consolidating 2+ piles
+            return {
+                type: 'trotta',
+                cardId: card.id,
+                pileIds: consolidatable.map(p => p.id)
+            };
+        }
+    }
+    
+    // 2. Check for Capture (Prioritizing Mulles via score)
     let bestCapture: Move | null = null;
     let maxScore = -1;
 
@@ -267,37 +492,21 @@ export const findBestMove = (aiHand: Card[], table: TablePile[]): Move => {
 
     if (bestCapture) return bestCapture;
 
-    // 3. Check for Build
+    // 3. Check for Build (with proper validation)
+    const aiBuilds = table.filter(p => p.isBuild && p.owner === 'opponent');
+    
     for (const playCard of aiHand) {
-        const playVal = getTableValue(playCard);
-        const reservations = aiHand.filter(c => c.id !== playCard.id);
-        
-        for (const resCard of reservations) {
-            const targetVal = getHandValue(resCard);
-            const neededSum = targetVal - playVal;
-            
-            if (neededSum >= 0) {
-                 // Build on empty table (neededSum 0) or combining with loose cards
-                 let pileIds: string[] = [];
-                 if (neededSum > 0) {
-                     // Find ONE subset to build with
-                     const loosePiles = table.filter(p => !p.isBuild); // Simplified: build on loose
-                     const subsets = findSubsetsSum(loosePiles, neededSum);
-                     if (subsets.length > 0) {
-                         // Pick largest subset
-                         subsets.sort((a,b) => b.length - a.length);
-                         pileIds = subsets[0].map(p => p.id);
-                     } else {
-                         continue; // Cannot fulfill sum
-                     }
-                 }
-                 
-                 return {
-                     type: 'build',
-                     cardId: playCard.id,
-                     pileIds: pileIds,
-                     buildValue: targetVal
-                 };
+        // Try building on single piles
+        const singles = table.filter(p => !p.isBuild && p.cards.length === 1 && !p.isLocked);
+        for (const pile of singles) {
+            const buildValue = canBuild(playCard, [pile], aiHand, table, aiBuilds);
+            if (buildValue !== null) {
+                return {
+                    type: 'build',
+                    cardId: playCard.id,
+                    pileIds: [pile.id],
+                    buildValue
+                };
             }
         }
     }

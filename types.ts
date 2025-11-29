@@ -57,7 +57,7 @@ export interface GameLog {
 }
 
 export interface Move {
-  type: 'capture' | 'build' | 'discard';
+  type: 'capture' | 'build' | 'discard' | 'trotta';
   cardId: string;
   pileIds: string[];
   buildValue?: number;
